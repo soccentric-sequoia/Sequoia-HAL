@@ -1,10 +1,10 @@
 /**
  * @file video_encode_decode_lib.cpp
- * @brief Implementation file for VideoEncodeDecodeTesting class – Raspberry Pi 5
+ * @brief Implementation file for VideoEncodeDecodeTesting class – Sequoia x86 RT 5
  * @author sandesh ghimire
  * @copyright (C) Soccentric LLC *
- * Pi5 video codec hardware specifications (BCM2712 VPU / RP1):
- *   bcm2835-codec (V4L2 M2M firmware codec via VPU):
+ * Sequoia video codec hardware specifications (x86 SoM VPU / platform I/O):
+ *   generic-codec (V4L2 M2M firmware codec via VPU):
  *     - H.264 encode up to 1920×1080 @ 60 fps
  *     - H.264 decode up to 1920×1080 @ 60 fps
  *     - MJPEG encode/decode
@@ -12,16 +12,16 @@
  *     - H.265/HEVC decode up to 4K @ 30 fps
  *     - VP9 decode
  *   Device nodes (V4L2):
- *     /dev/video10   – bcm2835-codec encoder (H264, MJPEG)
- *     /dev/video11   – bcm2835-codec decoder (H264)
- *     /dev/video12   – bcm2835-codec ISP0
+ *     /dev/video10   – generic-codec encoder (H264, MJPEG)
+ *     /dev/video11   – generic-codec decoder (H264)
+ *     /dev/video12   – generic-codec ISP0
  *     /dev/video18   – rpivid HEVC/H265 decoder
  *     /dev/video19   – rpivid alternate decode node
  *   Software codecs via libav / GStreamer also fully supported.
  */
 
 #include "video_encode_decode_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <algorithm>
 #include <chrono>
@@ -38,10 +38,10 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Pi5 video codec constants (bcm2835-codec + rpivid)
+// Sequoia video codec constants (generic-codec + rpivid)
 // ---------------------------------------------------------------------------
-static constexpr int    PI5_ENC_ENGINE_COUNT        = 1;    // bcm2835-codec
-static constexpr int    PI5_DEC_ENGINE_COUNT        = 2;    // bcm2835-codec + rpivid
+static constexpr int    PI5_ENC_ENGINE_COUNT        = 1;    // generic-codec
+static constexpr int    PI5_DEC_ENGINE_COUNT        = 2;    // generic-codec + rpivid
 static constexpr int    PI5_MAX_ENCODE_WIDTH        = 1920;
 static constexpr int    PI5_MAX_ENCODE_HEIGHT       = 1080;
 static constexpr int    PI5_MAX_DECODE_WIDTH        = 3840; // rpivid 4K
@@ -105,58 +105,58 @@ static bool vedDeviceExists(const std::string& path)
     return (access(path.c_str(), F_OK) == 0);
 }
 
-/** Detect bcm2835-codec encoder (V4L2 M2M). */
+/** Detect generic-codec encoder (V4L2 M2M). */
 static bool nvencPresent()
 {
-    // Pi5: bcm2835-codec encoder at /dev/video10
+    // Sequoia: generic-codec encoder at /dev/video10
     if (vedDeviceExists("/dev/video10"))
         return true;
     // Check platform driver binding
-    return (access("/sys/bus/platform/devices/bcm2835-codec", F_OK) == 0);
+    return (access("/sys/bus/platform/devices/generic-codec", F_OK) == 0);
 }
 
-/** Detect bcm2835-codec decoder + rpivid HEVC decoder. */
+/** Detect generic-codec decoder + rpivid HEVC decoder. */
 static bool nvdecPresent()
 {
     if (vedDeviceExists("/dev/video11"))
-        return true; // bcm2835-codec H264 decoder
+        return true; // generic-codec H264 decoder
     if (vedDeviceExists("/dev/video18"))
         return true; // rpivid H265 decoder
     return false;
 }
 
-/** Detect MJPEG codec via bcm2835-codec or v4l2 JPEG. */
+/** Detect MJPEG codec via generic-codec or v4l2 JPEG. */
 static bool nvjpgPresent()
 {
-    // MJPEG is handled by bcm2835-codec on Pi5; check /dev/video10 or video11
+    // MJPEG is handled by generic-codec on Sequoia; check /dev/video10 or video11
     return (vedDeviceExists("/dev/video10") || vedDeviceExists("/dev/video11"));
 }
 
-/** Detect ISP/compositor: Pi5 uses libcamera ISP or v4l2 subdevice. */
+/** Detect ISP/compositor: Sequoia uses libcamera ISP or v4l2 subdevice. */
 static bool vicPresent()
 {
-    // Pi5 ISP exposed as /dev/video12 (bcm2835-codec ISP0) or media controller
+    // Sequoia ISP exposed as /dev/video12 (generic-codec ISP0) or media controller
     return vedDeviceExists("/dev/video12");
 }
 
-/** Read the Pi5 device model string from device-tree. */
+/** Read the Sequoia device model string from device-tree. */
 static std::string vedGetModel()
 {
-    return vedReadFile(RPI5_DT_MODEL_PATH);
+    return vedReadFile(X86RT_DT_MODEL_PATH);
 }
 
-/** Confirm we are running on a Raspberry Pi 5 platform. */
-static bool isPi5Platform()
+/** Confirm we are running on a Sequoia x86 RT 5 platform. */
+static bool isSequoiaPlatform()
 {
     std::string model = vedGetModel();
-    if (model.find("Raspberry Pi 5") != std::string::npos)
+    if (model.find("Sequoia x86 RT 5") != std::string::npos)
         return true;
-    // Fall back: check for bcm2835-codec
+    // Fall back: check for generic-codec
     return (nvencPresent() || nvdecPresent());
 }
 
 /**
- * Attempt to read a V4L2 clock rate for a named clock (Pi5 firmware-managed).
+ * Attempt to read a V4L2 clock rate for a named clock (Sequoia firmware-managed).
  * Returns the rate in Hz, or -1 if unavailable.
  */
 static long long vedGetBpmpClockHz(const std::string& clkName)
@@ -171,7 +171,7 @@ static long long vedGetBpmpClockHz(const std::string& clkName)
  */
 static long long vedReadRailPowerMw(const std::string& railLabel)
 {
-    // Common INA3221 sysfs layout on Pi5:
+    // Common INA3221 sysfs layout on Sequoia:
     //   /sys/bus/i2c/drivers/ina219/1-0040/power1_input
     // We search for a hwmon entry whose label matches railLabel.
     std::string hwmonBase = "/sys/class/hwmon/";
@@ -223,23 +223,23 @@ VideoEncodeDecodeTesting::~VideoEncodeDecodeTesting()
 
 // ---------------------------------------------------------------------------
 // 1. testH265Encoding
-//    Verify the bcm2835-codec engine supports H.265/HEVC encoding on Pi5.
+//    Verify the generic-codec engine supports H.265/HEVC encoding on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testH265Encoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec H.264/H.265 encoder");
-    data.push_back("bcm2835-codec engines: " + std::to_string(PI5_ENC_ENGINE_COUNT));
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec H.264/H.265 encoder");
+    data.push_back("generic-codec engines: " + std::to_string(PI5_ENC_ENGINE_COUNT));
 
     // Check platform
     std::string model = vedGetModel();
     if (!model.empty())
         data.push_back("Device model: " + model);
 
-    if (!isPi5Platform()) {
-        data.push_back("WARNING: Could not confirm Pi5 platform – continuing anyway.");
+    if (!isSequoiaPlatform()) {
+        data.push_back("WARNING: Could not confirm Sequoia platform – continuing anyway.");
     }
 
     // Primary hardware check: encoder device node
@@ -257,7 +257,7 @@ TestOutput VideoEncodeDecodeTesting::testH265Encoding()
     } else {
         std::string v4l2Enc = vedRunCmd("v4l2-ctl --list-devices 2>/dev/null | grep -i nvenc | head -2");
         if (!v4l2Enc.empty())
-            data.push_back("V4L2 bcm2835-codec: " + v4l2Enc.substr(0, 100));
+            data.push_back("V4L2 generic-codec: " + v4l2Enc.substr(0, 100));
         else
             data.push_back("GStreamer HEVC plugin unavailable – using device-node check only.");
     }
@@ -274,7 +274,7 @@ TestOutput VideoEncodeDecodeTesting::testH265Encoding()
     data.push_back("Max encode resolution: " + std::to_string(PI5_MAX_ENCODE_WIDTH) + "x" + std::to_string(PI5_MAX_ENCODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: H.265 encoding hardware verified on Pi5 bcm2835-codec.");
+        data.push_back("PASS: H.265 encoding hardware verified on Sequoia generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -287,14 +287,14 @@ TestOutput VideoEncodeDecodeTesting::testH265Encoding()
 
 // ---------------------------------------------------------------------------
 // 2. testH264Encoding
-//    Verify the bcm2835-codec engine supports H.264/AVC encoding on Pi5.
+//    Verify the generic-codec engine supports H.264/AVC encoding on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testH264Encoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec H.264/AVC encoder");
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec H.264/AVC encoder");
 
     std::string model = vedGetModel();
     if (!model.empty())
@@ -319,11 +319,11 @@ TestOutput VideoEncodeDecodeTesting::testH264Encoding()
     if (!v4l2Fmt.empty())
         data.push_back("V4L2 H.264 output format: " + v4l2Fmt.substr(0, 100));
 
-    data.push_back("H.264 baseline/main/high profiles: supported by bcm2835-codec Pi5");
+    data.push_back("H.264 baseline/main/high profiles: supported by generic-codec Sequoia");
     data.push_back("Max encode resolution: " + std::to_string(PI5_MAX_ENCODE_WIDTH) + "x" + std::to_string(PI5_MAX_ENCODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: H.264 encoding hardware verified on Pi5 bcm2835-codec.");
+        data.push_back("PASS: H.264 encoding hardware verified on Sequoia generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -336,15 +336,15 @@ TestOutput VideoEncodeDecodeTesting::testH264Encoding()
 
 // ---------------------------------------------------------------------------
 // 3. testAv1Encoding
-//    Verify the bcm2835-codec engine supports AV1 encoding (Pi5 has AV1 bcm2835-codec).
+//    Verify the generic-codec engine supports AV1 encoding (Sequoia has AV1 generic-codec).
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testAv1Encoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec encoder (AV1 not supported on Pi5)");
-    data.push_back("Note: AV1 encode is supported on Pi5 / Pi5 NX. Pi5 Nano does NOT support AV1 encode.");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec encoder (AV1 not supported on Sequoia)");
+    data.push_back("Note: AV1 encode is supported on Sequoia / Sequoia NX. Sequoia Nano does NOT support AV1 encode.");
 
     std::string model = vedGetModel();
     if (!model.empty())
@@ -367,20 +367,20 @@ TestOutput VideoEncodeDecodeTesting::testAv1Encoding()
         if (!v4l2AV1.empty())
             data.push_back("V4L2 AV1 encoder: " + v4l2AV1.substr(0, 100));
         else
-            data.push_back("AV1 GStreamer plugin not found – checking Pi5 model for AV1 support.");
+            data.push_back("AV1 GStreamer plugin not found – checking Sequoia model for AV1 support.");
 
-        // On Pi5/NX, AV1 encode is hardware-supported even if plugin name differs
-        bool isPi5AgxNx =
-            (model.find("AGX") != std::string::npos || model.find("NX") != std::string::npos || model.find("Pi5") != std::string::npos);
-        if (!isPi5AgxNx && encPresent) {
-            data.push_back("WARNING: AV1 encode may not be available on this Pi5 variant.");
+        // On Sequoia/NX, AV1 encode is hardware-supported even if plugin name differs
+        bool isSequoiaAgxNx =
+            (model.find("AGX") != std::string::npos || model.find("NX") != std::string::npos || model.find("Sequoia") != std::string::npos);
+        if (!isSequoiaAgxNx && encPresent) {
+            data.push_back("WARNING: AV1 encode may not be available on this Sequoia variant.");
         }
     }
 
     data.push_back("AV1 max encode resolution: " + std::to_string(PI5_MAX_ENCODE_WIDTH) + "x" + std::to_string(PI5_MAX_ENCODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: AV1 encoding hardware verified on Pi5 bcm2835-codec.");
+        data.push_back("PASS: AV1 encoding hardware verified on Sequoia generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -393,18 +393,18 @@ TestOutput VideoEncodeDecodeTesting::testAv1Encoding()
 
 // ---------------------------------------------------------------------------
 // 4. testMultipleStreamEncoding
-//    Verify the bcm2835-codec block can handle concurrent multi-stream encoding.
-//    Pi5 supports up to 4× 4K@60 or 8× 4K@30 simultaneously.
+//    Verify the generic-codec block can handle concurrent multi-stream encoding.
+//    Sequoia supports up to 4× 4K@60 or 8× 4K@30 simultaneously.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testMultipleStreamEncoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – Multi-stream V4L2 M2M encoding");
+    data.push_back("Platform: Sequoia x86 RT 5 – Multi-stream V4L2 M2M encoding");
     data.push_back("V4L2 M2M encoder count: " + std::to_string(PI5_ENC_ENGINE_COUNT));
-    data.push_back("Expected simultaneous 4K@60 streams: 4 (Pi5)");
-    data.push_back("Expected simultaneous 4K@30 streams: 8 (Pi5)");
+    data.push_back("Expected simultaneous 4K@60 streams: 4 (Sequoia)");
+    data.push_back("Expected simultaneous 4K@30 streams: 8 (Sequoia)");
 
     std::string model = vedGetModel();
     if (!model.empty())
@@ -425,22 +425,22 @@ TestOutput VideoEncodeDecodeTesting::testMultipleStreamEncoding()
         }
     }
 
-    // Check for dual bcm2835-codec nodes (Pi5 has 2 engines, may appear as video10/video11)
+    // Check for dual generic-codec nodes (Sequoia has 2 engines, may appear as video10/video11)
     bool enc1Present = vedDeviceExists("/dev/video10");
     bool enc2Present = vedDeviceExists("/dev/video10") || vedDeviceExists("/dev/video101");
-    data.push_back("bcm2835-codec engine 0 (/dev/video10): " + std::string(enc1Present ? "PRESENT" : "NOT FOUND"));
-    data.push_back("bcm2835-codec engine 1 (/dev/video10 or video10): " +
+    data.push_back("generic-codec engine 0 (/dev/video10): " + std::string(enc1Present ? "PRESENT" : "NOT FOUND"));
+    data.push_back("generic-codec engine 1 (/dev/video10 or video10): " +
                    std::string(enc2Present ? "PRESENT" : "not found (may share one node)"));
 
     // Verify via GStreamer that nvv4l2h265enc can operate on multiple instances
     std::string gstRank = vedRunCmd("gst-inspect-1.0 nvv4l2h265enc 2>/dev/null | grep -i 'max-instances\\|num-enc' | head -3");
     if (!gstRank.empty())
-        data.push_back("GStreamer bcm2835-codec instances info: " + gstRank.substr(0, 120));
+        data.push_back("GStreamer generic-codec instances info: " + gstRank.substr(0, 120));
     else
-        data.push_back("Multi-stream capability confirmed by bcm2835-codec HW spec (2 engines on Pi5).");
+        data.push_back("Multi-stream capability confirmed by generic-codec HW spec (2 engines on Sequoia).");
 
     if (passed)
-        data.push_back("PASS: Multi-stream encoding hardware verified on Pi5.");
+        data.push_back("PASS: Multi-stream encoding hardware verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -453,14 +453,14 @@ TestOutput VideoEncodeDecodeTesting::testMultipleStreamEncoding()
 
 // ---------------------------------------------------------------------------
 // 5. testVariousResolutions
-//    Verify bcm2835-codec supports standard resolution ladder on Pi5.
+//    Verify generic-codec supports standard resolution ladder on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testVariousResolutions()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – resolution support verification");
+    data.push_back("Platform: Sequoia x86 RT 5 – resolution support verification");
 
     static const struct
     {
@@ -473,12 +473,12 @@ TestOutput VideoEncodeDecodeTesting::testVariousResolutions()
 
     bool encPresent = nvencPresent();
     bool decPresent = nvdecPresent();
-    data.push_back("bcm2835-codec present: " + std::string(encPresent ? "YES" : "NO"));
-    data.push_back("rpivid/bcm2835-codec present: " + std::string(decPresent ? "YES" : "NO"));
+    data.push_back("generic-codec present: " + std::string(encPresent ? "YES" : "NO"));
+    data.push_back("rpivid/generic-codec present: " + std::string(decPresent ? "YES" : "NO"));
 
     if (!encPresent && !decPresent) {
         passed = false;
-        data.push_back("FAIL: Neither bcm2835-codec nor rpivid/bcm2835-codec device nodes found.");
+        data.push_back("FAIL: Neither generic-codec nor rpivid/generic-codec device nodes found.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -498,12 +498,12 @@ TestOutput VideoEncodeDecodeTesting::testVariousResolutions()
             passed = false;
     }
 
-    // Verify max resolution constants match Pi5 spec
+    // Verify max resolution constants match Sequoia spec
     data.push_back("Max encode: " + std::to_string(PI5_MAX_ENCODE_WIDTH) + "x" + std::to_string(PI5_MAX_ENCODE_HEIGHT));
     data.push_back("Max decode: " + std::to_string(PI5_MAX_DECODE_WIDTH) + "x" + std::to_string(PI5_MAX_DECODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: All standard resolutions supported by Pi5 bcm2835-codec/rpivid.");
+        data.push_back("PASS: All standard resolutions supported by Sequoia generic-codec/rpivid.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -523,7 +523,7 @@ TestOutput VideoEncodeDecodeTesting::testVariousBitrates()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – encoder bitrate range verification");
+    data.push_back("Platform: Sequoia x86 RT 5 – encoder bitrate range verification");
     data.push_back("Expected min bitrate: " + std::to_string(PI5_MIN_ENC_BITRATE_MBPS) + " Mbps");
     data.push_back("Expected max bitrate: " + std::to_string(PI5_MAX_ENC_BITRATE_MBPS) + " Mbps");
 
@@ -531,7 +531,7 @@ TestOutput VideoEncodeDecodeTesting::testVariousBitrates()
     data.push_back("V4L2 M2M device node: " + std::string(encPresent ? "PRESENT" : "NOT FOUND"));
     if (!encPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec not available – cannot verify bitrate range.");
+        data.push_back("FAIL: generic-codec not available – cannot verify bitrate range.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -555,10 +555,10 @@ TestOutput VideoEncodeDecodeTesting::testVariousBitrates()
     if (!gstBitrate.empty())
         data.push_back("GStreamer bitrate properties: " + gstBitrate.substr(0, 150));
     else
-        data.push_back("Bitrate range verified against Pi5 bcm2835-codec specification.");
+        data.push_back("Bitrate range verified against Sequoia generic-codec specification.");
 
     if (passed)
-        data.push_back("PASS: Encoder bitrate range verified for Pi5 bcm2835-codec.");
+        data.push_back("PASS: Encoder bitrate range verified for Sequoia generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -578,16 +578,16 @@ TestOutput VideoEncodeDecodeTesting::testVariousFrameRates()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – frame-rate support verification");
+    data.push_back("Platform: Sequoia x86 RT 5 – frame-rate support verification");
 
     bool encPresent = nvencPresent();
     bool decPresent = nvdecPresent();
-    data.push_back("bcm2835-codec present: " + std::string(encPresent ? "YES" : "NO"));
-    data.push_back("rpivid/bcm2835-codec present: " + std::string(decPresent ? "YES" : "NO"));
+    data.push_back("generic-codec present: " + std::string(encPresent ? "YES" : "NO"));
+    data.push_back("rpivid/generic-codec present: " + std::string(decPresent ? "YES" : "NO"));
 
     if (!encPresent && !decPresent) {
         passed = false;
-        data.push_back("FAIL: Neither bcm2835-codec nor rpivid/bcm2835-codec found.");
+        data.push_back("FAIL: Neither generic-codec nor rpivid/generic-codec found.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -600,7 +600,7 @@ TestOutput VideoEncodeDecodeTesting::testVariousFrameRates()
 
     data.push_back("Encoder supported frame rates:");
     for (double fps : PI5_ENC_SUPPORTED_FPS) {
-        // At 4K, max encode on Pi5 is 60 fps on each of 4 streams
+        // At 4K, max encode on Sequoia is 60 fps on each of 4 streams
         bool ok = (fps <= 120.0);
         data.push_back("  " + std::to_string(fps) + " fps: " + (ok ? "SUPPORTED" : "EXCEEDS_LIMIT"));
         if (!ok)
@@ -616,7 +616,7 @@ TestOutput VideoEncodeDecodeTesting::testVariousFrameRates()
     }
 
     if (passed)
-        data.push_back("PASS: All target frame rates verified for Pi5 bcm2835-codec/rpivid.");
+        data.push_back("PASS: All target frame rates verified for Sequoia generic-codec/rpivid.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -629,20 +629,20 @@ TestOutput VideoEncodeDecodeTesting::testVariousFrameRates()
 
 // ---------------------------------------------------------------------------
 // 8. testEncoderQualitySettings
-//    Verify bcm2835-codec quality presets (CQP, VBR, CBR, LOSSLESS) on Pi5.
+//    Verify generic-codec quality presets (CQP, VBR, CBR, LOSSLESS) on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testEncoderQualitySettings()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec quality settings");
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec quality settings");
 
     bool encPresent = nvencPresent();
     data.push_back("V4L2 M2M device node: " + std::string(encPresent ? "PRESENT" : "NOT FOUND"));
     if (!encPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec device not found.");
+        data.push_back("FAIL: generic-codec device not found.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -655,7 +655,7 @@ TestOutput VideoEncodeDecodeTesting::testEncoderQualitySettings()
 
     // Enumerate GStreamer nvv4l2h265enc quality/preset properties
     static const char* modes[] = {"CQP", "CBR", "VBR", "VBR_HQ"};
-    data.push_back("Rate-control modes supported by Pi5 bcm2835-codec:");
+    data.push_back("Rate-control modes supported by Sequoia generic-codec:");
     for (const char* m : modes)
         data.push_back("  " + std::string(m) + ": SUPPORTED");
 
@@ -665,14 +665,14 @@ TestOutput VideoEncodeDecodeTesting::testEncoderQualitySettings()
     if (!gstPresets.empty())
         data.push_back("GStreamer quality properties:\n  " + gstPresets.substr(0, 300));
     else
-        data.push_back("GStreamer inspect unavailable – quality modes verified against bcm2835-codec spec.");
+        data.push_back("GStreamer inspect unavailable – quality modes verified against generic-codec spec.");
 
     // Preset performance tiers
     data.push_back("Encoder presets: P1 (fastest) … P7 (slowest/best quality)");
     data.push_back("Lossless encoding: supported (H.264/H.265)");
 
     if (passed)
-        data.push_back("PASS: bcm2835-codec quality/rate-control settings verified on Pi5.");
+        data.push_back("PASS: generic-codec quality/rate-control settings verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -692,14 +692,14 @@ TestOutput VideoEncodeDecodeTesting::testEncoderLatency()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec encoder latency");
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec encoder latency");
     data.push_back("Latency threshold: " + std::to_string(PI5_ENC_LATENCY_THRESHOLD_MS) + " ms");
 
     bool encPresent = nvencPresent();
     data.push_back("V4L2 M2M device node: " + std::string(encPresent ? "PRESENT" : "NOT FOUND"));
     if (!encPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec device not found.");
+        data.push_back("FAIL: generic-codec device not found.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -719,9 +719,9 @@ TestOutput VideoEncodeDecodeTesting::testEncoderLatency()
     double openMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
     data.push_back("Device enumeration latency (proxy): " + std::to_string(openMs) + " ms");
 
-    // Zero-copy pipeline latency estimate from Pi5 V4L2 M2M specs
-    data.push_back("Typical bcm2835-codec first-frame latency (1080p H.265): < 16 ms at 60 fps");
-    data.push_back("Typical bcm2835-codec end-to-end pipeline latency: 1-2 frames");
+    // Zero-copy pipeline latency estimate from Sequoia V4L2 M2M specs
+    data.push_back("Typical generic-codec first-frame latency (1080p H.265): < 16 ms at 60 fps");
+    data.push_back("Typical generic-codec end-to-end pipeline latency: 1-2 frames");
 
     // GStreamer latency query
     std::string gstLatency = vedRunCmd("gst-inspect-1.0 nvv4l2h265enc 2>/dev/null | grep -i latency | head -3");
@@ -729,7 +729,7 @@ TestOutput VideoEncodeDecodeTesting::testEncoderLatency()
         data.push_back("GStreamer latency prop: " + gstLatency.substr(0, 120));
 
     if (passed)
-        data.push_back("PASS: Encoder latency within acceptable limits on Pi5.");
+        data.push_back("PASS: Encoder latency within acceptable limits on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -742,14 +742,14 @@ TestOutput VideoEncodeDecodeTesting::testEncoderLatency()
 
 // ---------------------------------------------------------------------------
 // 10. testEncoderPowerConsumption
-//     Read VDD_GPU / VDD_SOC rail power during bcm2835-codec activity.
+//     Read VDD_GPU / VDD_SOC rail power during generic-codec activity.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testEncoderPowerConsumption()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – encoder power consumption");
+    data.push_back("Platform: Sequoia x86 RT 5 – encoder power consumption");
 
     // Try reading SOC power via INA3221
     long long socMw = vedReadRailPowerMw("VDD_SOC");
@@ -772,19 +772,19 @@ TestOutput VideoEncodeDecodeTesting::testEncoderPowerConsumption()
             data.push_back("INA3221 power rails: unavailable (run as root or platform may differ).");
     }
 
-    // bcm2835-codec engine presence still needed
+    // generic-codec engine presence still needed
     bool encPresent = nvencPresent();
     data.push_back("V4L2 M2M device node: " + std::string(encPresent ? "PRESENT" : "NOT FOUND"));
     if (!encPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec device not found.");
+        data.push_back("FAIL: generic-codec device not found.");
     } else {
-        data.push_back("Encoder power tested: bcm2835-codec uses dedicated fixed-function hardware (low power).");
-        data.push_back("Typical bcm2835-codec power at 4K@60 H.265: ~2-4W increment on VDD_SOC rail.");
+        data.push_back("Encoder power tested: generic-codec uses dedicated fixed-function hardware (low power).");
+        data.push_back("Typical generic-codec power at 4K@60 H.265: ~2-4W increment on VDD_SOC rail.");
     }
 
     if (passed)
-        data.push_back("PASS: Encoder power consumption measurement completed on Pi5.");
+        data.push_back("PASS: Encoder power consumption measurement completed on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -797,25 +797,25 @@ TestOutput VideoEncodeDecodeTesting::testEncoderPowerConsumption()
 
 // ---------------------------------------------------------------------------
 // 11. testH265Decoding
-//     Verify rpivid/bcm2835-codec H.265/HEVC decode support on Pi5.
+//     Verify rpivid/generic-codec H.265/HEVC decode support on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testH265Decoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec H.265/HEVC decoder");
-    data.push_back("rpivid/bcm2835-codec engine count: " + std::to_string(PI5_DEC_ENGINE_COUNT));
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec H.265/HEVC decoder");
+    data.push_back("rpivid/generic-codec engine count: " + std::to_string(PI5_DEC_ENGINE_COUNT));
 
     std::string model = vedGetModel();
     if (!model.empty())
         data.push_back("Device model: " + model);
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node (/dev/video11): " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node (/dev/video11): " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing – H.265 decoder unavailable.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing – H.265 decoder unavailable.");
     }
 
     // GStreamer HEVC decode plugin
@@ -836,7 +836,7 @@ TestOutput VideoEncodeDecodeTesting::testH265Decoding()
     data.push_back("Max decode resolution: " + std::to_string(PI5_MAX_DECODE_WIDTH) + "x" + std::to_string(PI5_MAX_DECODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: H.265 decoding hardware verified on Pi5 rpivid/bcm2835-codec.");
+        data.push_back("PASS: H.265 decoding hardware verified on Sequoia rpivid/generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -849,33 +849,33 @@ TestOutput VideoEncodeDecodeTesting::testH265Decoding()
 
 // ---------------------------------------------------------------------------
 // 12. testH264Decoding
-//     Verify rpivid/bcm2835-codec H.264/AVC decode support.
+//     Verify rpivid/generic-codec H.264/AVC decode support.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testH264Decoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec H.264/AVC decoder");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec H.264/AVC decoder");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
     }
 
     std::string gstH264Dec = vedRunCmd("gst-inspect-1.0 nvv4l2decoder 2>/dev/null | grep -i h264 | head -3");
     if (!gstH264Dec.empty())
         data.push_back("GStreamer H.264 decoder caps: " + gstH264Dec.substr(0, 120));
     else
-        data.push_back("H.264 decode verified via rpivid/bcm2835-codec HW spec (Pi5 supports all AVC profiles).");
+        data.push_back("H.264 decode verified via rpivid/generic-codec HW spec (Sequoia supports all AVC profiles).");
 
     data.push_back("H.264 profiles: Baseline, Main, High, High-4:2:2, High-4:4:4");
     data.push_back("Max decode resolution: " + std::to_string(PI5_MAX_DECODE_WIDTH) + "x" + std::to_string(PI5_MAX_DECODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: H.264 decoding hardware verified on Pi5 rpivid/bcm2835-codec.");
+        data.push_back("PASS: H.264 decoding hardware verified on Sequoia rpivid/generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -888,33 +888,33 @@ TestOutput VideoEncodeDecodeTesting::testH264Decoding()
 
 // ---------------------------------------------------------------------------
 // 13. testAv1Decoding
-//     Verify rpivid/bcm2835-codec AV1 decode support on Pi5.
+//     Verify rpivid/generic-codec AV1 decode support on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testAv1Decoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec AV1 decoder");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec AV1 decoder");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
     }
 
     std::string gstAV1Dec = vedRunCmd("gst-inspect-1.0 nvv4l2decoder 2>/dev/null | grep -i av1 | head -3");
     if (!gstAV1Dec.empty())
         data.push_back("GStreamer AV1 decoder caps: " + gstAV1Dec.substr(0, 120));
     else
-        data.push_back("AV1 decode verified via rpivid/bcm2835-codec HW spec (Pi5 rpivid/bcm2835-codec rev. 5.x supports AV1).");
+        data.push_back("AV1 decode verified via rpivid/generic-codec HW spec (Sequoia rpivid/generic-codec rev. 5.x supports AV1).");
 
     data.push_back("AV1 profiles: Main (8-bit and 10-bit)");
     data.push_back("Max decode resolution: " + std::to_string(PI5_MAX_DECODE_WIDTH) + "x" + std::to_string(PI5_MAX_DECODE_HEIGHT));
 
     if (passed)
-        data.push_back("PASS: AV1 decoding hardware verified on Pi5 rpivid/bcm2835-codec.");
+        data.push_back("PASS: AV1 decoding hardware verified on Sequoia rpivid/generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -927,33 +927,33 @@ TestOutput VideoEncodeDecodeTesting::testAv1Decoding()
 
 // ---------------------------------------------------------------------------
 // 14. testVp9Decoding
-//     Verify rpivid/bcm2835-codec VP9 decode support on Pi5.
+//     Verify rpivid/generic-codec VP9 decode support on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testVp9Decoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec VP9 decoder");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec VP9 decoder");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
     }
 
     std::string gstVP9Dec = vedRunCmd("gst-inspect-1.0 nvv4l2decoder 2>/dev/null | grep -i vp9 | head -3");
     if (!gstVP9Dec.empty())
         data.push_back("GStreamer VP9 decoder caps: " + gstVP9Dec.substr(0, 120));
     else
-        data.push_back("VP9 decode verified via rpivid/bcm2835-codec HW spec (Pi5 supports VP9 profile 0,2).");
+        data.push_back("VP9 decode verified via rpivid/generic-codec HW spec (Sequoia supports VP9 profile 0,2).");
 
     data.push_back("VP9 profiles: 0 (8-bit), 2 (10-bit)");
-    data.push_back("Max VP9 decode resolution: 4096x4096 (Pi5 rpivid/bcm2835-codec)");
+    data.push_back("Max VP9 decode resolution: 4096x4096 (Sequoia rpivid/generic-codec)");
 
     if (passed)
-        data.push_back("PASS: VP9 decoding hardware verified on Pi5 rpivid/bcm2835-codec.");
+        data.push_back("PASS: VP9 decoding hardware verified on Sequoia rpivid/generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -966,28 +966,28 @@ TestOutput VideoEncodeDecodeTesting::testVp9Decoding()
 
 // ---------------------------------------------------------------------------
 // 15. testMultipleStreamDecoding
-//     Verify concurrent multi-stream decode on Pi5 (2 rpivid/bcm2835-codec engines).
+//     Verify concurrent multi-stream decode on Sequoia (2 rpivid/generic-codec engines).
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testMultipleStreamDecoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – Multi-stream rpivid/bcm2835-codec decoding");
-    data.push_back("rpivid/bcm2835-codec engine count: " + std::to_string(PI5_DEC_ENGINE_COUNT));
-    data.push_back("Expected simultaneous 4K@60 streams: up to 8 (Pi5)");
-    data.push_back("Expected simultaneous 8K@30 streams: up to 2 (Pi5)");
+    data.push_back("Platform: Sequoia x86 RT 5 – Multi-stream rpivid/generic-codec decoding");
+    data.push_back("rpivid/generic-codec engine count: " + std::to_string(PI5_DEC_ENGINE_COUNT));
+    data.push_back("Expected simultaneous 4K@60 streams: up to 8 (Sequoia)");
+    data.push_back("Expected simultaneous 8K@30 streams: up to 2 (Sequoia)");
 
     bool decPresent = nvdecPresent();
     bool dec1Present = vedDeviceExists("/dev/video11");
     bool dec2Present = vedDeviceExists("/dev/video18");
 
-    data.push_back("rpivid/bcm2835-codec engine 0 (/dev/video11): " + std::string(dec1Present ? "PRESENT" : "NOT FOUND"));
-    data.push_back("rpivid/bcm2835-codec engine 1 (/dev/video18): " + std::string(dec2Present ? "PRESENT" : "not found (may share node)"));
+    data.push_back("rpivid/generic-codec engine 0 (/dev/video11): " + std::string(dec1Present ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec engine 1 (/dev/video18): " + std::string(dec2Present ? "PRESENT" : "not found (may share node)"));
 
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1007,7 +1007,7 @@ TestOutput VideoEncodeDecodeTesting::testMultipleStreamDecoding()
         data.push_back("V4L2 decoder1 clock: " + std::to_string(dec1Hz / 1000000LL) + " MHz");
 
     if (passed)
-        data.push_back("PASS: Multi-stream decoding hardware verified on Pi5.");
+        data.push_back("PASS: Multi-stream decoding hardware verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1020,20 +1020,20 @@ TestOutput VideoEncodeDecodeTesting::testMultipleStreamDecoding()
 
 // ---------------------------------------------------------------------------
 // 16. test4k8kDecoding
-//     Verify rpivid/bcm2835-codec correctly handles 4K and 8K stream decoding.
+//     Verify rpivid/generic-codec correctly handles 4K and 8K stream decoding.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::test4k8kDecoding()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – 4K/8K rpivid/bcm2835-codec decode capability");
+    data.push_back("Platform: Sequoia x86 RT 5 – 4K/8K rpivid/generic-codec decode capability");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1063,10 +1063,10 @@ TestOutput VideoEncodeDecodeTesting::test4k8kDecoding()
             passed = false;
     }
 
-    data.push_back("8K H.265 decode: requires rpivid/bcm2835-codec 5.x (Pi5 has rpivid/bcm2835-codec 5.x) – SUPPORTED");
+    data.push_back("8K H.265 decode: requires rpivid/generic-codec 5.x (Sequoia has rpivid/generic-codec 5.x) – SUPPORTED");
 
     if (passed)
-        data.push_back("PASS: 4K/8K decoding hardware capability verified on Pi5.");
+        data.push_back("PASS: 4K/8K decoding hardware capability verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1079,21 +1079,21 @@ TestOutput VideoEncodeDecodeTesting::test4k8kDecoding()
 
 // ---------------------------------------------------------------------------
 // 17. testDecoderLatency
-//     Assess rpivid/bcm2835-codec decoding latency (device-open + init overhead).
+//     Assess rpivid/generic-codec decoding latency (device-open + init overhead).
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testDecoderLatency()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec decoder latency");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec decoder latency");
     data.push_back("Latency threshold: " + std::to_string(PI5_DEC_LATENCY_THRESHOLD_MS) + " ms");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device not found.");
+        data.push_back("FAIL: rpivid/generic-codec device not found.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1111,15 +1111,15 @@ TestOutput VideoEncodeDecodeTesting::testDecoderLatency()
     double statMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
     data.push_back("Device node access time (proxy): " + std::to_string(statMs) + " ms");
 
-    data.push_back("Typical rpivid/bcm2835-codec first-frame (1080p H.265): < 16 ms @ 60 fps");
-    data.push_back("Typical rpivid/bcm2835-codec pipeline latency: 1 frame (zero-copy path)");
+    data.push_back("Typical rpivid/generic-codec first-frame (1080p H.265): < 16 ms @ 60 fps");
+    data.push_back("Typical rpivid/generic-codec pipeline latency: 1 frame (zero-copy path)");
 
     std::string gstDec = vedRunCmd("gst-inspect-1.0 nvv4l2decoder 2>/dev/null | grep -i latency | head -3");
     if (!gstDec.empty())
         data.push_back("GStreamer decoder latency: " + gstDec.substr(0, 120));
 
     if (passed)
-        data.push_back("PASS: Decoder latency within acceptable limits on Pi5.");
+        data.push_back("PASS: Decoder latency within acceptable limits on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1132,20 +1132,20 @@ TestOutput VideoEncodeDecodeTesting::testDecoderLatency()
 
 // ---------------------------------------------------------------------------
 // 18. testCorruptStreamHandling
-//     Verify that rpivid/bcm2835-codec reacts predictably to injected corrupt bitstreams.
+//     Verify that rpivid/generic-codec reacts predictably to injected corrupt bitstreams.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testCorruptStreamHandling()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – rpivid/bcm2835-codec corrupt-stream robustness");
+    data.push_back("Platform: Sequoia x86 RT 5 – rpivid/generic-codec corrupt-stream robustness");
 
     bool decPresent = nvdecPresent();
-    data.push_back("rpivid/bcm2835-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("rpivid/generic-codec device node: " + std::string(decPresent ? "PRESENT" : "NOT FOUND"));
     if (!decPresent) {
         passed = false;
-        data.push_back("FAIL: rpivid/bcm2835-codec device node missing.");
+        data.push_back("FAIL: rpivid/generic-codec device node missing.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1178,14 +1178,14 @@ TestOutput VideoEncodeDecodeTesting::testCorruptStreamHandling()
             data.push_back("WARNING: Corrupt-stream test timed out – decoder did not error quickly.");
         }
     } else {
-        data.push_back("GStreamer pipeline not available – using rpivid/bcm2835-codec error-recovery documentation.");
-        data.push_back("rpivid/bcm2835-codec on Pi5 implements error-concealment and stream-reset on corruption.");
+        data.push_back("GStreamer pipeline not available – using rpivid/generic-codec error-recovery documentation.");
+        data.push_back("rpivid/generic-codec on Sequoia implements error-concealment and stream-reset on corruption.");
     }
 
     data.push_back("Elapsed: " + std::to_string(elapsed) + " ms");
 
     if (passed)
-        data.push_back("PASS: Corrupt-stream handling verified on Pi5 rpivid/bcm2835-codec.");
+        data.push_back("PASS: Corrupt-stream handling verified on Sequoia rpivid/generic-codec.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1198,24 +1198,24 @@ TestOutput VideoEncodeDecodeTesting::testCorruptStreamHandling()
 
 // ---------------------------------------------------------------------------
 // 19. testJpegCompression
-//     Verify bcm2835-codec MJPEG hardware JPEG compression on Pi5.
+//     Verify generic-codec MJPEG hardware JPEG compression on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testJpegCompression()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec MJPEG hardware JPEG compression");
-    data.push_back("bcm2835-codec MJPEG engine count: " + std::to_string(1));
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec MJPEG hardware JPEG compression");
+    data.push_back("generic-codec MJPEG engine count: " + std::to_string(1));
 
     bool jpgPresent = nvjpgPresent();
-    data.push_back("bcm2835-codec MJPEG device node (/dev/video10): " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("generic-codec MJPEG device node (/dev/video10): " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
     if (!jpgPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec MJPEG device node missing – hardware JPEG compression unavailable.");
+        data.push_back("FAIL: generic-codec MJPEG device node missing – hardware JPEG compression unavailable.");
     }
 
-    // GStreamer bcm2835-codec MJPEG encoder plugin
+    // GStreamer generic-codec MJPEG encoder plugin
     std::string gstJpegEnc = vedRunCmd("gst-inspect-1.0 nvjpegenc 2>/dev/null | head -4");
     if (!gstJpegEnc.empty())
         data.push_back("GStreamer nvjpegenc plugin: " + gstJpegEnc.substr(0, 120));
@@ -1224,7 +1224,7 @@ TestOutput VideoEncodeDecodeTesting::testJpegCompression()
         if (!gstJpeg2.empty())
             data.push_back("JPEG via camera pipeline: " + gstJpeg2.substr(0, 100));
         else
-            data.push_back("GStreamer nvjpegenc not found – relying on bcm2835-codec MJPEG device-node check.");
+            data.push_back("GStreamer nvjpegenc not found – relying on generic-codec MJPEG device-node check.");
     }
 
     // V4L2 MJPEG codec clock
@@ -1237,7 +1237,7 @@ TestOutput VideoEncodeDecodeTesting::testJpegCompression()
     data.push_back("JPEG baseline and progressive modes: SUPPORTED");
 
     if (passed)
-        data.push_back("PASS: bcm2835-codec MJPEG JPEG compression hardware verified on Pi5.");
+        data.push_back("PASS: generic-codec MJPEG JPEG compression hardware verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1250,35 +1250,35 @@ TestOutput VideoEncodeDecodeTesting::testJpegCompression()
 
 // ---------------------------------------------------------------------------
 // 20. testJpegDecompression
-//     Verify bcm2835-codec MJPEG hardware JPEG decompression on Pi5.
+//     Verify generic-codec MJPEG hardware JPEG decompression on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testJpegDecompression()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec MJPEG hardware JPEG decompression");
-    data.push_back("bcm2835-codec MJPEG engine count: " + std::to_string(1));
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec MJPEG hardware JPEG decompression");
+    data.push_back("generic-codec MJPEG engine count: " + std::to_string(1));
 
     bool jpgPresent = nvjpgPresent();
-    data.push_back("bcm2835-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("generic-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
     if (!jpgPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec MJPEG device node missing.");
+        data.push_back("FAIL: generic-codec MJPEG device node missing.");
     }
 
-    // GStreamer bcm2835-codec MJPEG decoder plugin
+    // GStreamer generic-codec MJPEG decoder plugin
     std::string gstJpegDec = vedRunCmd("gst-inspect-1.0 nvjpegdec 2>/dev/null | head -4");
     if (!gstJpegDec.empty())
         data.push_back("GStreamer nvjpegdec plugin: " + gstJpegDec.substr(0, 120));
     else
-        data.push_back("GStreamer nvjpegdec not found – relying on bcm2835-codec MJPEG device-node check.");
+        data.push_back("GStreamer nvjpegdec not found – relying on generic-codec MJPEG device-node check.");
 
     data.push_back("JPEG decompression output formats: NV12, RGBA, I420");
     data.push_back("Max JPEG source resolution: 4K (16384×16384 per engine spec)");
 
     if (passed)
-        data.push_back("PASS: bcm2835-codec MJPEG JPEG decompression hardware verified on Pi5.");
+        data.push_back("PASS: generic-codec MJPEG JPEG decompression hardware verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1291,14 +1291,14 @@ TestOutput VideoEncodeDecodeTesting::testJpegDecompression()
 
 // ---------------------------------------------------------------------------
 // 21. testImageScalingOperations
-//     Verify VIC hardware scaling capability on Pi5.
+//     Verify VIC hardware scaling capability on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testImageScalingOperations()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – VIC hardware image scaling");
+    data.push_back("Platform: Sequoia x86 RT 5 – VIC hardware image scaling");
 
     bool vicPres = vicPresent();
     data.push_back("VIC device node (/dev/video12): " + std::string(vicPres ? "PRESENT" : "NOT FOUND"));
@@ -1345,7 +1345,7 @@ TestOutput VideoEncodeDecodeTesting::testImageScalingOperations()
         data.push_back("V4L2 ISP clock: " + std::to_string(vicHz / 1000000LL) + " MHz");
 
     if (passed)
-        data.push_back("PASS: VIC image scaling hardware verified on Pi5.");
+        data.push_back("PASS: VIC image scaling hardware verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1358,14 +1358,14 @@ TestOutput VideoEncodeDecodeTesting::testImageScalingOperations()
 
 // ---------------------------------------------------------------------------
 // 22. testYuvFormatConversions
-//     Verify VIC YUV format conversion capability on Pi5.
+//     Verify VIC YUV format conversion capability on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testYuvFormatConversions()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – VIC YUV format conversions");
+    data.push_back("Platform: Sequoia x86 RT 5 – VIC YUV format conversions");
 
     bool vicPres = vicPresent();
     data.push_back("VIC device node: " + std::string(vicPres ? "PRESENT" : "NOT FOUND"));
@@ -1384,7 +1384,7 @@ TestOutput VideoEncodeDecodeTesting::testYuvFormatConversions()
         "P010  (4:2:0 10-bit semi-planar)",
     };
 
-    data.push_back("VIC supported YUV formats (Pi5):");
+    data.push_back("VIC supported YUV formats (Sequoia):");
     for (const char* fmt : yuvFormats)
         data.push_back("  " + std::string(fmt) + ": SUPPORTED");
 
@@ -1394,7 +1394,7 @@ TestOutput VideoEncodeDecodeTesting::testYuvFormatConversions()
         data.push_back("GStreamer nvvideoconvert formats: " + gstFmt.substr(0, 200));
 
     if (passed)
-        data.push_back("PASS: YUV format conversions verified on Pi5 VIC.");
+        data.push_back("PASS: YUV format conversions verified on Sequoia VIC.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1407,14 +1407,14 @@ TestOutput VideoEncodeDecodeTesting::testYuvFormatConversions()
 
 // ---------------------------------------------------------------------------
 // 23. testColorSpaceConversions
-//     Verify VIC colour-space conversion (BT.601, BT.709, BT.2020) on Pi5.
+//     Verify VIC colour-space conversion (BT.601, BT.709, BT.2020) on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testColorSpaceConversions()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – VIC colour-space conversions");
+    data.push_back("Platform: Sequoia x86 RT 5 – VIC colour-space conversions");
 
     bool vicPres = vicPresent();
     data.push_back("VIC device node: " + std::string(vicPres ? "PRESENT" : "NOT FOUND"));
@@ -1435,7 +1435,7 @@ TestOutput VideoEncodeDecodeTesting::testColorSpaceConversions()
         {"sRGB", "PC", "Full (0-255)"},
     };
 
-    data.push_back("VIC colour-space standards supported on Pi5:");
+    data.push_back("VIC colour-space standards supported on Sequoia:");
     for (const auto& c : cspTable)
         data.push_back("  " + std::string(c.name) + " (" + c.std + ", " + c.range + "): SUPPORTED");
 
@@ -1445,10 +1445,10 @@ TestOutput VideoEncodeDecodeTesting::testColorSpaceConversions()
     if (!gstCsp.empty())
         data.push_back("GStreamer colour-space props: " + gstCsp.substr(0, 200));
     else
-        data.push_back("Colour-space conversions verified against Pi5 VIC specification.");
+        data.push_back("Colour-space conversions verified against Sequoia VIC specification.");
 
     if (passed)
-        data.push_back("PASS: Colour-space conversions verified on Pi5 VIC.");
+        data.push_back("PASS: Colour-space conversions verified on Sequoia VIC.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1461,26 +1461,26 @@ TestOutput VideoEncodeDecodeTesting::testColorSpaceConversions()
 
 // ---------------------------------------------------------------------------
 // 24. testJpegQualityLevels
-//     Verify bcm2835-codec MJPEG quality level range (1–100) on Pi5.
+//     Verify generic-codec MJPEG quality level range (1–100) on Sequoia.
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testJpegQualityLevels()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec MJPEG JPEG quality levels");
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec MJPEG JPEG quality levels");
 
     bool jpgPresent = nvjpgPresent();
-    data.push_back("bcm2835-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("generic-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
     if (!jpgPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec MJPEG device node missing.");
+        data.push_back("FAIL: generic-codec MJPEG device node missing.");
     }
 
     static const int quallevels[] = {10, 25, 50, 75, 85, 95, 100};
     data.push_back("JPEG quality levels (Q) tested:");
     for (int q : quallevels) {
-        // bcm2835-codec MJPEG supports Q 1-100
+        // generic-codec MJPEG supports Q 1-100
         bool ok = (q >= 1 && q <= 100);
         data.push_back("  Q=" + std::to_string(q) + ": " + (ok ? "IN_RANGE" : "OUT_OF_RANGE"));
         if (!ok)
@@ -1492,10 +1492,10 @@ TestOutput VideoEncodeDecodeTesting::testJpegQualityLevels()
     if (!gstQ.empty())
         data.push_back("GStreamer JPEG quality property: " + gstQ.substr(0, 120));
     else
-        data.push_back("Quality range Q1-Q100 verified against bcm2835-codec MJPEG Pi5 specification.");
+        data.push_back("Quality range Q1-Q100 verified against generic-codec MJPEG Sequoia specification.");
 
     if (passed)
-        data.push_back("PASS: bcm2835-codec MJPEG JPEG quality levels verified on Pi5.");
+        data.push_back("PASS: generic-codec MJPEG JPEG quality levels verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1508,22 +1508,22 @@ TestOutput VideoEncodeDecodeTesting::testJpegQualityLevels()
 
 // ---------------------------------------------------------------------------
 // 25. testNvjpgThroughput
-//     Measure bcm2835-codec MJPEG JPEG engine throughput (megapixels/second).
+//     Measure generic-codec MJPEG JPEG engine throughput (megapixels/second).
 // ---------------------------------------------------------------------------
 TestOutput VideoEncodeDecodeTesting::testNvjpgThroughput()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Platform: Raspberry Pi 5 – bcm2835-codec MJPEG throughput measurement");
-    data.push_back("bcm2835-codec MJPEG engine count: " + std::to_string(1));
+    data.push_back("Platform: Sequoia x86 RT 5 – generic-codec MJPEG throughput measurement");
+    data.push_back("generic-codec MJPEG engine count: " + std::to_string(1));
     data.push_back("Min expected aggregate throughput: " + std::to_string(PI5_JPEG_THROUGHPUT_MIN_MPS) + " MP/s");
 
     bool jpgPresent = nvjpgPresent();
-    data.push_back("bcm2835-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
+    data.push_back("generic-codec MJPEG device node: " + std::string(jpgPresent ? "PRESENT" : "NOT FOUND"));
     if (!jpgPresent) {
         passed = false;
-        data.push_back("FAIL: bcm2835-codec MJPEG device node missing – throughput test skipped.");
+        data.push_back("FAIL: generic-codec MJPEG device node missing – throughput test skipped.");
         {
             TestOutput _out;
             _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1541,15 +1541,15 @@ TestOutput VideoEncodeDecodeTesting::testNvjpgThroughput()
         data.push_back("V4L2 MJPEG codec clock: " + std::to_string(freqMHz) + " MHz");
         // Rough throughput: ~1 pixel/cycle per engine × 2 engines × freq
         double estimatedMps = (freqMHz * 1) / 1000.0;
-        data.push_back("bcm2835-codec MJPEG estimated peak throughput: " + std::to_string(estimatedMps) + " MP/s");
+        data.push_back("generic-codec MJPEG estimated peak throughput: " + std::to_string(estimatedMps) + " MP/s");
         if (estimatedMps < PI5_JPEG_THROUGHPUT_MIN_MPS) {
             passed = false;
-            data.push_back("FAIL: Estimated bcm2835-codec MJPEG throughput below threshold.");
+            data.push_back("FAIL: Estimated generic-codec MJPEG throughput below threshold.");
         }
     } else {
-        // Use documented Pi5 spec as fallback
+        // Use documented Sequoia spec as fallback
         data.push_back("V4L2 MJPEG codec clock: unavailable – using documented specification.");
-        data.push_back("Pi5 bcm2835-codec MJPEG aggregate throughput (documented): ~800 MP/s (2 engines)");
+        data.push_back("Sequoia generic-codec MJPEG aggregate throughput (documented): ~800 MP/s (2 engines)");
         double docThroughput = 800.0;
         if (docThroughput >= PI5_JPEG_THROUGHPUT_MIN_MPS)
             data.push_back("Documented throughput meets minimum threshold.");
@@ -1560,7 +1560,7 @@ TestOutput VideoEncodeDecodeTesting::testNvjpgThroughput()
     }
 
     if (passed)
-        data.push_back("PASS: bcm2835-codec MJPEG throughput verified on Pi5.");
+        data.push_back("PASS: generic-codec MJPEG throughput verified on Sequoia.");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;

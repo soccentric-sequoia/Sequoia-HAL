@@ -334,6 +334,12 @@ class CommunicationInterfaceTesting : public TestBase
     TestOutput testCanMessageFiltering();
 
     /**
+     * @brief Measure local IPC round-trip latency for RT partition messaging.
+     * @return TestOutput with pass/fail and latency details
+     */
+    TestOutput testIpcRoundTripLatency();
+
+    /**
      * @brief Get list of all available test names
      * @return Vector of test names
      */

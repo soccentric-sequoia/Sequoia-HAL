@@ -1,16 +1,16 @@
 /**
  * @file mcu_interface_lib.cpp
- * @brief MCU interface tests for Raspberry Pi 5.
- *        Pi5 can communicate with an external MCU (RP2040, STM32, etc.) via
+ * @brief MCU interface tests for Sequoia x86 RT 5.
+ *        Sequoia can communicate with an external MCU (software RT engine, STM32, etc.) via
  *        SPI (/dev/spidev0.0), UART (/dev/ttyAMA0), or I2C (/dev/i2c-1).
  *        Tests labelled "testMcuToOrinDataTransfer" and "testMcuDmsInterface"
- *        reference Jetson AGX Orin; they are mapped to Pi5 equivalents.
+ *        reference Jetson AGX Orin; they are mapped to Sequoia equivalents.
  * @author sandesh ghimire
  * @copyright (C) Lucid Motors
  */
 
 #include "mcu_interface_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <cerrno>
@@ -80,7 +80,7 @@ McuInterfaceTesting::~McuInterfaceTesting()
 TestOutput McuInterfaceTesting::testMcuCommunicationInterface()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU Communication Interfaces (Pi5 → RP2040/STM32) ===");
+    data.push_back("=== MCU Communication Interfaces (Sequoia → software RT engine/STM32) ===");
 
     // SPI
     bool spiOk = mcuPathExists("/dev/spidev0.0");
@@ -98,8 +98,8 @@ TestOutput McuInterfaceTesting::testMcuCommunicationInterface()
                          : "[INFO] /dev/i2c-1 not found (dtparam=i2c_arm=on)");
 
     // GPIO chip (needed for chip-select / IRQ)
-    bool gpioOk = mcuPathExists(RPI5_GPIOCHIP_PATH);
-    data.push_back(gpioOk ? "[PASS] GPIO chip " + std::string(RPI5_GPIOCHIP_PATH) + " present"
+    bool gpioOk = mcuPathExists(X86RT_GPIOCHIP_PATH);
+    data.push_back(gpioOk ? "[PASS] GPIO chip " + std::string(X86RT_GPIOCHIP_PATH) + " present"
                           : "[WARN] GPIO chip not found");
 
     bool anyOk = spiOk || uartOk || i2cOk;
@@ -119,12 +119,12 @@ TestOutput McuInterfaceTesting::testMcuCommunicationInterface()
 TestOutput McuInterfaceTesting::testMcuFirmwareOperation()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU Firmware Operation (Pi5 UART probe) ===");
+    data.push_back("=== MCU Firmware Operation (Sequoia UART probe) ===");
 
     if (!mcuPathExists("/dev/ttyAMA0"))
     {
         data.push_back("[INFO] /dev/ttyAMA0 not available — skipping firmware probe");
-        data.push_back("[INFO] Connect MCU (RP2040/STM32) TX→Pi5 UART0 RX for this test");
+        data.push_back("[INFO] Connect MCU (software RT engine/STM32) TX→Sequoia UART0 RX for this test");
         {
             TestOutput _out;
             _out.status = hal::Status::PASS;
@@ -160,14 +160,14 @@ TestOutput McuInterfaceTesting::testMcuFirmwareOperation()
 }
 
 /**
- * @brief Verify MCU watchdog functionality (check Pi5 hardware watchdog as proxy).
+ * @brief Verify MCU watchdog functionality (check Sequoia hardware watchdog as proxy).
  */
 TestOutput McuInterfaceTesting::testMcuWatchdog()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU Watchdog (Pi5 RP1 WDT proxy) ===");
+    data.push_back("=== MCU Watchdog (Sequoia platform I/O WDT proxy) ===");
 
-    // RP1 hardware watchdog (acts as board-level safety monitor)
+    // platform I/O hardware watchdog (acts as board-level safety monitor)
     bool wdPresent = mcuPathExists("/dev/watchdog0");
     data.push_back(wdPresent ? "[PASS] Hardware watchdog /dev/watchdog0 available"
                              : "[WARN] No watchdog device");
@@ -178,8 +178,8 @@ TestOutput McuInterfaceTesting::testMcuWatchdog()
                                   : "[INFO] Watchdog info:\n" + wdInfo);
 
     // For MCU watchdog: MCU should receive periodic heartbeat via SPI/UART
-    data.push_back("[INFO] MCU watchdog expects periodic 0x5A heartbeat on SPI/UART from Pi5");
-    data.push_back("[INFO] MCU resets Pi5 via nRESET GPIO if heartbeat stops");
+    data.push_back("[INFO] MCU watchdog expects periodic 0x5A heartbeat on SPI/UART from Sequoia");
+    data.push_back("[INFO] MCU resets Sequoia via nRESET GPIO if heartbeat stops");
 
     {
         TestOutput _out;
@@ -197,11 +197,11 @@ TestOutput McuInterfaceTesting::testMcuWatchdog()
 TestOutput McuInterfaceTesting::testMcuGpioInterface()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU GPIO Interface (Pi5 GPIO header) ===");
+    data.push_back("=== MCU GPIO Interface (Sequoia GPIO header) ===");
 
     // gpiochip info
-    bool gpioChipOk = mcuPathExists(RPI5_GPIOCHIP_PATH);
-    data.push_back(gpioChipOk ? "[PASS] " + std::string(RPI5_GPIOCHIP_PATH) + " present"
+    bool gpioChipOk = mcuPathExists(X86RT_GPIOCHIP_PATH);
+    data.push_back(gpioChipOk ? "[PASS] " + std::string(X86RT_GPIOCHIP_PATH) + " present"
                               : "[WARN] GPIO chip not found");
 
     // Available GPIO lines
@@ -332,15 +332,15 @@ TestOutput McuInterfaceTesting::testMcuUartInterface()
 }
 
 /**
- * @brief Driver Monitoring System interface (N/A on Pi5 standalone).
- *        Tests SPI/UART channel used for DMS camera readout on Pi5.
+ * @brief Driver Monitoring System interface (N/A on Sequoia standalone).
+ *        Tests SPI/UART channel used for DMS camera readout on Sequoia.
  */
 TestOutput McuInterfaceTesting::testMcuDmsInterface()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU DMS Interface (Pi5 proxy) ===");
+    data.push_back("=== MCU DMS Interface (Sequoia proxy) ===");
     data.push_back("[INFO] DMS (Driver Monitoring System) is application-specific");
-    data.push_back("[INFO] On Pi5 a DMS MCU would connect via USB-HID or UART");
+    data.push_back("[INFO] On Sequoia a DMS MCU would connect via USB-HID or UART");
 
     // Check for USB HID devices (potential DMS MCU)
     std::string hidDevs = mcuRunCmd("ls /dev/hidraw* 2>/dev/null");
@@ -364,15 +364,15 @@ TestOutput McuInterfaceTesting::testMcuDmsInterface()
 }
 
 /**
- * @brief MCU-to-Pi5 data transfer (replaces Jetson testMcuToOrinDataTransfer).
+ * @brief MCU-to-Sequoia data transfer (replaces Jetson testMcuToOrinDataTransfer).
  * @details Verifies end-to-end message transfer over SPI or UART between MCU
- *          and Pi5.  Without a physical MCU, checks loopback capability.
+ *          and Sequoia.  Without a physical MCU, checks loopback capability.
  */
 TestOutput McuInterfaceTesting::testMcuToOrinDataTransfer()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU-to-Pi5 Data Transfer (SPI/UART) ===");
-    data.push_back("[INFO] Function name 'testMcuToOrinDataTransfer' refers to Jetson; Pi5 equivalent used");
+    data.push_back("=== MCU-to-Sequoia Data Transfer (SPI/UART) ===");
+    data.push_back("[INFO] Function name 'testMcuToOrinDataTransfer' refers to Jetson; Sequoia equivalent used");
 
     bool spiOk = mcuPathExists("/dev/spidev0.0");
     bool uartOk = mcuPathExists("/dev/ttyAMA0");
@@ -380,12 +380,12 @@ TestOutput McuInterfaceTesting::testMcuToOrinDataTransfer()
     if (spiOk)
     {
         data.push_back("[PASS] SPI /dev/spidev0.0 available for MCU data transfer");
-        data.push_back("[INFO] Max SPI speed: 25 MHz (RP2040-limited); Pi5 SPI supports 125 MHz");
+        data.push_back("[INFO] Max SPI speed: 25 MHz (software RT engine-limited); Sequoia SPI supports 125 MHz");
     }
     if (uartOk)
     {
         data.push_back("[PASS] UART /dev/ttyAMA0 available for MCU data transfer");
-        data.push_back("[INFO] UART baud range: 9600 – 921600 bps (Pi5 PL011)");
+        data.push_back("[INFO] UART baud range: 9600 – 921600 bps (Sequoia PL011)");
     }
     if (!spiOk && !uartOk)
         data.push_back("[WARN] Neither SPI nor UART available for MCU data transfer");
@@ -401,13 +401,13 @@ TestOutput McuInterfaceTesting::testMcuToOrinDataTransfer()
 }
 
 /**
- * @brief Secondary MCU redundancy check (e.g. dual RP2040 co-processors).
+ * @brief Secondary MCU redundancy check (e.g. dual software RT engine co-processors).
  */
 TestOutput McuInterfaceTesting::testSecondaryMcuRedundancy()
 {
     std::vector<std::string> data;
-    data.push_back("=== Secondary MCU Redundancy (Pi5) ===");
-    data.push_back("[INFO] Pi5 supports two SPI buses (SPI0, SPI1) for dual-MCU topology");
+    data.push_back("=== Secondary MCU Redundancy (Sequoia) ===");
+    data.push_back("[INFO] Sequoia supports two SPI buses (SPI0, SPI1) for dual-MCU topology");
 
     bool spi0 = mcuPathExists("/dev/spidev0.0");
     bool spi1 = mcuPathExists("/dev/spidev1.0");
@@ -434,7 +434,7 @@ TestOutput McuInterfaceTesting::testSecondaryMcuRedundancy()
 TestOutput McuInterfaceTesting::testMcuFailoverMechanism()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU Failover Mechanism (Pi5) ===");
+    data.push_back("=== MCU Failover Mechanism (Sequoia) ===");
     data.push_back("[INFO] MCU failover requires hardware: watchdog signal + GPIO nRESET + secondary SPI");
 
     // Check both SPI buses
@@ -459,12 +459,12 @@ TestOutput McuInterfaceTesting::testMcuFailoverMechanism()
 }
 
 /**
- * @brief MCU synchronization: time-sync between Pi5 and MCU via PPS / SPI timestamp.
+ * @brief MCU synchronization: time-sync between Sequoia and MCU via PPS / SPI timestamp.
  */
 TestOutput McuInterfaceTesting::testMcuSynchronization()
 {
     std::vector<std::string> data;
-    data.push_back("=== MCU Synchronization (Pi5 PPS / SPI timestamp) ===");
+    data.push_back("=== MCU Synchronization (Sequoia PPS / SPI timestamp) ===");
 
     // Check for PPS device (MCU may provide 1 PPS signal)
     bool ppsOk = mcuPathExists("/dev/pps0");

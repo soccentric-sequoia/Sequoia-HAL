@@ -1,5 +1,5 @@
-# Raspberry Pi 5 (BCM2712 / RP1) build container
-# Uses Ubuntu 22.04 LTS for ARM64 — runs natively on Pi5 or via QEMU on x86_64
+# Sequoia x86 RT 5 (x86 RT / RP1) build container
+# Uses Ubuntu 22.04 LTS for ARM64 — runs natively on Sequoia or via QEMU on x86_64
 FROM ubuntu:22.04
 
 ARG UID=1000

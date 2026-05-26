@@ -6,7 +6,7 @@ install(TARGETS lib_base
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-install(FILES lib_base.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/acadia_hal)
+install(FILES lib_base.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sequoia_hal)
 
 # Add all feature libraries
 add_subdirectory(gpu_lib)

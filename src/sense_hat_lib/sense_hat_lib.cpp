@@ -1,8 +1,8 @@
 /**
  * @file sense_hat_lib.cpp
- * @brief Sense HAT tests for Raspberry Pi 5.
+ * @brief Sense HAT tests for Sequoia x86 RT 5.
  *
- * Hardware: Raspberry Pi Sense HAT (V1/V2) on 40-pin GPIO header.
+ * Hardware: Sequoia x86 RT Sense HAT (V1/V2) on expansion GPIO header.
  *   - HTS221  humidity/temp sensor  — I2C-1 @ 0x5C, IIO driver hts221
  *   - LPS25H  pressure sensor       — I2C-1 @ 0x5F, IIO driver lps25h
  *   - LSM9DS1 9-DOF IMU             — I2C-1 accel 0x1C / gyro 0x6A / mag 0x1E
@@ -16,7 +16,7 @@
  */
 
 #include "sense_hat_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <cstdio>
@@ -88,19 +88,19 @@ SenseHatTesting::~SenseHatTesting() {}
 TestOutput SenseHatTesting::testSenseHatDetection()
 {
     std::vector<std::string> data;
-    data.push_back("=== Sense HAT Detection (Pi5 I2C-1) ===");
+    data.push_back("=== Sense HAT Detection (Sequoia I2C-1) ===");
 
     bool i2c1 = shPathExists("/dev/i2c-1");
     data.push_back(i2c1 ? "[PASS] /dev/i2c-1 present"
                         : "[WARN] /dev/i2c-1 absent — enable with dtparam=i2c_arm=on");
 
     // Check overlay loaded
-    std::string cmdline = shReadFile("/boot/firmware/config.txt");
+    std::string cmdline = shReadFile("/boot/firmware/kernel cmdline");
     bool overlayLoaded = !shRunCmd("dtoverlay -l 2>/dev/null | grep -c 'sense'").empty();
     (void)overlayLoaded;
     bool senseFb = shPathExists("/dev/fb1") || !shRunCmd("lsmod | grep -c 'rpi_sense_fb'").empty();
     data.push_back(senseFb ? "[PASS] rpi-sense-fb module / /dev/fb1 present"
-                           : "[INFO] rpi-sense-fb not loaded (add dtoverlay=rpi-sense-hat to config.txt)");
+                           : "[INFO] rpi-sense-fb not loaded (add dtoverlay=rpi-sense-hat to kernel cmdline)");
 
     // Sense HAT I2C addresses
     struct { const char* name; const char* addr; } addrs[] = {
@@ -412,7 +412,7 @@ TestOutput SenseHatTesting::testJoystick()
 
     // The Sense HAT joystick registers as EV_KEY input via ATtiny88
     std::string inputs = shRunCmd(
-        "grep -rl 'Raspberry Pi Sense HAT Joystick' /sys/class/input/*/device/name 2>/dev/null | head -2");
+        "grep -rl 'Sequoia x86 RT Sense HAT Joystick' /sys/class/input/*/device/name 2>/dev/null | head -2");
     if (inputs.empty())
     {
         // Fallback: list all event devices

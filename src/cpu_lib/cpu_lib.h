@@ -217,6 +217,12 @@ class CpuTesting : public TestBase
     TestOutput testDmaOperations();
 
     /**
+     * @brief Measure wakeup jitter on an isolated core for PREEMPT_RT targets.
+     * @return TestOutput with pass/fail and jitter statistics
+     */
+    TestOutput testIsolatedCoreLatencyJitter();
+
+    /**
      * @brief Get list of all available test names
      * @return Vector of test names
      */

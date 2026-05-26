@@ -1,0 +1,48 @@
+# Sequoia PREEMPT_RT Isolation and Partitioning
+
+## Baseline RT Host Configuration
+
+Use a PREEMPT_RT kernel with one or more hard-isolated cores:
+
+- `isolcpus=2-3`
+- `nohz_full=2-3`
+- `rcu_nocbs=2-3`
+- IRQ affinity moved off isolated cores
+- RT tasks pinned to isolated cores with `SCHED_FIFO`
+
+Example boot args:
+
+`intel_iommu=on iommu=pt isolcpus=2-3 nohz_full=2-3 rcu_nocbs=2-3`
+
+## Optional Hypervisor Partitioning
+
+For strict partitioning, deploy a dedicated RT guest under KVM/Jailhouse/ACRN:
+
+- Host (Linux PREEMPT_RT): housekeeping + non-RT workloads
+- Guest/Cell: RT I/O loop and deterministic control tasks
+- Device assignment: PCIe endpoint, platform gpiochip, or dedicated I/O card via VFIO/passthrough
+
+## RT Task IPC Contract
+
+Transport contract used by HAL RT tests (`rt_engine.h`):
+
+- Transport: Unix datagram socket (`unix_dgram`)
+- Request payload: `uint32_t seq + uint64_t t0_ns`
+- Reply payload: `uint32_t seq + uint64_t t1_ns`
+- Maximum payload: `128` bytes
+- Target average round-trip: `<= 250 us`
+
+## Fault Handling Contract
+
+Partition fault handling policy:
+
+- A failing RT partition/process must terminate without taking down sibling partitions.
+- Parent/control partition must remain responsive (`/proc/self/status` healthy).
+- Fault reason is captured by signal or hypervisor event logs.
+
+The HAL test hooks validating this:
+
+- `CpuTesting::testIsolatedCoreLatencyJitter`
+- `CommunicationInterfaceTesting::testIpcRoundTripLatency`
+- `SystemIntegrationTesting::testRtPartitionConfiguration`
+- `FunctionalSafetyTesting::testPartitionFaultHandling`

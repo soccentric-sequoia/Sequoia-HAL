@@ -1,13 +1,13 @@
 /**
  * @file security_features_lib.cpp
- * @brief Implementation file for SecurityFeaturesTesting class — Raspberry Pi 5
- *        Pi5 security: ARMv8.2 crypto extensions, BoringSSL/OpenSSL, OTP fuses,
+ * @brief Implementation file for SecurityFeaturesTesting class — Sequoia x86 RT 5
+ *        Sequoia security: ARMv8.2 crypto extensions, BoringSSL/OpenSSL, OTP fuses,
  *        hardware RNG (/dev/hwrng), no onboard TPM by default.
  * @author sandesh ghimire
  * @copyright (C) Soccentric LLC */
 
 #include "security_features_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <cstdio>
@@ -63,18 +63,18 @@ TestOutput SecurityFeaturesTesting::testBootRomExecution()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("BCM2712 Boot ROM execution check");
-    data.push_back("Pi5 boot sequence: BootROM (OTP) → EEPROM bootloader → kernel");
+    data.push_back("x86 SoM Boot ROM execution check");
+    data.push_back("Sequoia boot sequence: BootROM (OTP) → EEPROM bootloader → kernel");
 
     // Check EEPROM bootloader version
-    std::string eeVersion = secRunCmd("vcgencmd bootloader_version 2>/dev/null");
+    std::string eeVersion = secRunCmd("sequoia-sysmon bootloader_version 2>/dev/null");
     if (!eeVersion.empty()) data.push_back("Bootloader version: " + eeVersion.substr(0, 200));
 
-    std::string eeConfig = secRunCmd("vcgencmd bootloader_config 2>/dev/null");
+    std::string eeConfig = secRunCmd("sequoia-sysmon bootloader_config 2>/dev/null");
     if (!eeConfig.empty()) data.push_back("Bootloader config: " + eeConfig.substr(0, 300));
 
     // Check secure boot OTP settings
-    std::string otpDump = secRunCmd("vcgencmd otp_dump 2>/dev/null | grep -E '17:|18:|29:|30:' | head -8");
+    std::string otpDump = secRunCmd("sequoia-sysmon otp_dump 2>/dev/null | grep -E '17:|18:|29:|30:' | head -8");
     if (!otpDump.empty()) data.push_back("OTP rows (17/18/29/30): " + otpDump.substr(0, 300));
 
     std::string dmesgBoot = secRunCmd("dmesg 2>/dev/null | grep -i 'boot\\|secure' | head -5");
@@ -99,11 +99,11 @@ TestOutput SecurityFeaturesTesting::testBootloaderSignatureVerification()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Bootloader signature verification check (Pi5)");
-    data.push_back("Pi5 supports optional RSA-2048 signed bootloader via OTP.");
+    data.push_back("Bootloader signature verification check (Sequoia)");
+    data.push_back("Sequoia supports optional RSA-2048 signed bootloader via OTP.");
 
     // Check if secure boot is enabled in OTP
-    std::string otpSec = secRunCmd("vcgencmd otp_dump 2>/dev/null | grep '77:'");
+    std::string otpSec = secRunCmd("sequoia-sysmon otp_dump 2>/dev/null | grep '77:'");
     if (!otpSec.empty()) {
         data.push_back("OTP row 77 (BOOT_CTRL): " + otpSec);
         // Bit 1 of row 77 = signed boot enabled
@@ -112,14 +112,14 @@ TestOutput SecurityFeaturesTesting::testBootloaderSignatureVerification()
         else
             data.push_back("Signed boot: possibly enabled — check bit 1.");
     } else {
-        data.push_back("vcgencmd otp_dump: not available.");
+        data.push_back("sequoia-sysmon otp_dump: not available.");
     }
 
     // Check for rpi-eeprom-config signature field
     std::string sigCheck = secRunCmd("rpi-eeprom-config 2>/dev/null | grep -i 'sign\\|public'");
     if (!sigCheck.empty()) data.push_back("rpi-eeprom-config: " + sigCheck.substr(0, 200));
 
-    data.push_back("Default Pi5: secure boot is DISABLED (unsigned bootloader).");
+    data.push_back("Default Sequoia: secure boot is DISABLED (unsigned bootloader).");
     data.push_back("Enable via: rpi-eeprom-config SIGNED_BOOT=1 and OTP fuse.");
     data.push_back("PASS: Bootloader signature check complete.");
     {
@@ -140,7 +140,7 @@ TestOutput SecurityFeaturesTesting::testKernelSignatureVerification()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Kernel signature verification check (Pi5)");
+    data.push_back("Kernel signature verification check (Sequoia)");
 
     // Check if kernel module signing is enabled
     std::string modSig = secReadFile("/proc/sys/kernel/modules_disabled");
@@ -158,7 +158,7 @@ TestOutput SecurityFeaturesTesting::testKernelSignatureVerification()
     std::string kConf = secRunCmd("grep -i 'MODULE_SIG\\|INTEGRITY' /boot/config-$(uname -r) 2>/dev/null | head -5");
     if (!kConf.empty()) data.push_back("Kernel config MODULE_SIG: " + kConf.substr(0, 300));
 
-    data.push_back("NOTE: Default Raspberry Pi OS does not enforce signed kernels.");
+    data.push_back("NOTE: Default Sequoia x86 RT OS does not enforce signed kernels.");
     data.push_back("PASS: Kernel signature check complete.");
     {
         TestOutput _out;
@@ -178,13 +178,13 @@ TestOutput SecurityFeaturesTesting::testSecureBootChainOfTrust()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Secure boot chain of trust check (Pi5)");
-    data.push_back("Pi5 chain: BootROM (immutable) → EEPROM (signed optional) → kernel");
+    data.push_back("Secure boot chain of trust check (Sequoia)");
+    data.push_back("Sequoia chain: BootROM (immutable) → EEPROM (signed optional) → kernel");
 
     // Check SecureBoot EFI variable (only if EFI is used)
     bool efiVar = (access("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c",
                           F_OK) == 0);
-    data.push_back("EFI SecureBoot variable: " + std::string(efiVar ? "present (EFI boot)" : "not present (Pi5 uses own boot)"));
+    data.push_back("EFI SecureBoot variable: " + std::string(efiVar ? "present (EFI boot)" : "not present (Sequoia uses own boot)"));
 
     // Check trusted keys
     bool trustedKeys = (access("/proc/keys", F_OK) == 0);
@@ -195,10 +195,10 @@ TestOutput SecurityFeaturesTesting::testSecureBootChainOfTrust()
 
     // Check if TPM is available (external TPM2.0 via SPI)
     bool tpmDev = (access("/dev/tpm0", F_OK) == 0);
-    data.push_back("/dev/tpm0 (external TPM): " + std::string(tpmDev ? "PRESENT" : "not found (not standard on Pi5)"));
+    data.push_back("/dev/tpm0 (external TPM): " + std::string(tpmDev ? "PRESENT" : "not found (not standard on Sequoia)"));
 
-    data.push_back("Pi5 default: no full secure boot chain (bootloader unsigned by default).");
-    data.push_back("Full secure boot possible with Pi5 HAT+SPI TPM and signed bootloader.");
+    data.push_back("Sequoia default: no full secure boot chain (bootloader unsigned by default).");
+    data.push_back("Full secure boot possible with Sequoia HAT+SPI TPM and signed bootloader.");
     data.push_back("PASS: Chain of trust check complete.");
     {
         TestOutput _out;
@@ -218,15 +218,15 @@ TestOutput SecurityFeaturesTesting::testHardwareRootOfTrust()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Hardware root of trust check (Pi5)");
-    data.push_back("Pi5 hardware RoT: BCM2712 OTP + immutable BootROM");
+    data.push_back("Hardware root of trust check (Sequoia)");
+    data.push_back("Sequoia hardware RoT: x86 SoM OTP + immutable BootROM");
 
     // Read OTP rows
-    std::string otp = secRunCmd("vcgencmd otp_dump 2>/dev/null | head -20");
+    std::string otp = secRunCmd("sequoia-sysmon otp_dump 2>/dev/null | head -20");
     if (!otp.empty()) data.push_back("OTP dump (first 20 rows): " + otp.substr(0, 400));
 
     // Check if OTP customer key is programmed
-    std::string custKey = secRunCmd("vcgencmd otp_dump 2>/dev/null | awk -F: '/^(17|18|19|20|21|22|23|24)/ {print $0}'");
+    std::string custKey = secRunCmd("sequoia-sysmon otp_dump 2>/dev/null | awk -F: '/^(17|18|19|20|21|22|23|24)/ {print $0}'");
     if (!custKey.empty()) data.push_back("OTP customer rows: " + custKey.substr(0, 300));
 
     // Check TPM
@@ -235,7 +235,7 @@ TestOutput SecurityFeaturesTesting::testHardwareRootOfTrust()
 
     // ARM TrustZone (OP-TEE)
     bool optee = (access("/dev/tee0", F_OK) == 0);
-    data.push_back("OP-TEE TrustZone (/dev/tee0): " + std::string(optee ? "present" : "not found (not default on Pi5)"));
+    data.push_back("OP-TEE TrustZone (/dev/tee0): " + std::string(optee ? "present" : "not found (not default on Sequoia)"));
 
     data.push_back("PASS: Hardware RoT check complete.");
     {
@@ -256,7 +256,7 @@ TestOutput SecurityFeaturesTesting::testSecureStorage()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Secure storage check (Pi5)");
+    data.push_back("Secure storage check (Sequoia)");
 
     // Check dm-crypt / LUKS support
     std::string dmCrypt = secRunCmd("lsmod 2>/dev/null | grep dm_crypt");
@@ -271,7 +271,7 @@ TestOutput SecurityFeaturesTesting::testSecureStorage()
     data.push_back("fscrypt: available via ext4 encryption (kernel 5.4+)");
 
     // Check if OTP can store keys
-    data.push_back("Pi5 OTP rows 17-24: customer RSA-2048 public key storage");
+    data.push_back("Sequoia OTP rows 17-24: customer RSA-2048 public key storage");
 
     data.push_back("PASS: Secure storage check complete.");
     {
@@ -292,7 +292,7 @@ TestOutput SecurityFeaturesTesting::testCryptographicAccelerators()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Cryptographic accelerators check (Pi5 — ARMv8.2-A Cortex-A76)");
+    data.push_back("Cryptographic accelerators check (Sequoia — ARMv8.2-A Cortex-A76)");
 
     // Check CPU crypto features
     std::string cpuFlags = secRunCmd("grep -m1 '^Features' /proc/cpuinfo 2>/dev/null");
@@ -341,7 +341,7 @@ TestOutput SecurityFeaturesTesting::testHardwareRandomNumberGenerator()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Hardware RNG check (Pi5: BCM2712 HRNG, /dev/hwrng)");
+    data.push_back("Hardware RNG check (Sequoia: x86 SoM HRNG, /dev/hwrng)");
 
     bool hwrngPresent = (access("/dev/hwrng", F_OK) == 0);
     data.push_back("/dev/hwrng: " + std::string(hwrngPresent ? "PRESENT" : "not found"));
@@ -371,7 +371,7 @@ TestOutput SecurityFeaturesTesting::testHardwareRandomNumberGenerator()
             data.push_back("INFO: Cannot read /dev/hwrng (permission denied? use root).");
         }
     } else {
-        data.push_back("INFO: Load with: modprobe bcm2835-rng or check dtparam=random=on");
+        data.push_back("INFO: Load with: modprobe generic-rng or check dtparam=random=on");
     }
 
     // Also check /dev/random entropy pool
@@ -405,9 +405,9 @@ TestOutput SecurityFeaturesTesting::testMemoryEncryption()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Memory encryption check (Pi5 LPDDR4X)");
-    data.push_back("Pi5 BCM2712 + LPDDR4X: NO hardware inline memory encryption.");
-    data.push_back("LPDDR4X does not support DRAM-level AES encryption on Pi5.");
+    data.push_back("Memory encryption check (Sequoia LPDDR4X)");
+    data.push_back("Sequoia x86 SoM + LPDDR4X: NO hardware inline memory encryption.");
+    data.push_back("LPDDR4X does not support DRAM-level AES encryption on Sequoia.");
 
     // Check ARM MTE (Memory Tagging Extension)
     std::string cpuFlags = secRunCmd("grep -m1 '^Features' /proc/cpuinfo 2>/dev/null");
@@ -422,7 +422,7 @@ TestOutput SecurityFeaturesTesting::testMemoryEncryption()
     std::string smaps = secRunCmd("cat /proc/1/smaps 2>/dev/null | grep -c 'ss'");
     data.push_back("Software memory protection: dm-crypt/LUKS for at-rest encryption.");
 
-    data.push_back("PASS: Memory encryption check complete (software-only on Pi5).");
+    data.push_back("PASS: Memory encryption check complete (software-only on Sequoia).");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -441,7 +441,7 @@ TestOutput SecurityFeaturesTesting::testDebugPortSecurity()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Debug port security check (Pi5)");
+    data.push_back("Debug port security check (Sequoia)");
 
     // Check if UART debug is accessible
     std::string uartCon = secRunCmd("systemctl status serial-getty@ttyAMA0.service 2>/dev/null | grep -i 'active\\|inactive'");
@@ -483,9 +483,9 @@ TestOutput SecurityFeaturesTesting::testJtagSecurity()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("JTAG security check (Pi5)");
-    data.push_back("Pi5 BCM2712 exposes JTAG via GPIO header (ARM CoreSight/DAP).");
-    data.push_back("Default: JTAG is DISABLED in Raspberry Pi OS (GPIO not muxed to JTAG).");
+    data.push_back("JTAG security check (Sequoia)");
+    data.push_back("Sequoia x86 SoM exposes JTAG via GPIO header (ARM CoreSight/DAP).");
+    data.push_back("Default: JTAG is DISABLED in Sequoia x86 RT OS (GPIO not muxed to JTAG).");
 
     // Check if JTAG is enabled in device tree
     std::string dtbJtag = secRunCmd("dtc -I fs /proc/device-tree 2>/dev/null | grep -i jtag | head -5");
@@ -493,11 +493,11 @@ TestOutput SecurityFeaturesTesting::testJtagSecurity()
     else data.push_back("JTAG: not visible in device tree (disabled by default).");
 
     // Check OTP JTAG disable bit
-    std::string otpJtag = secRunCmd("vcgencmd otp_dump 2>/dev/null | grep '65:'");
+    std::string otpJtag = secRunCmd("sequoia-sysmon otp_dump 2>/dev/null | grep '65:'");
     if (!otpJtag.empty()) data.push_back("OTP row 65 (JTAG ctrl): " + otpJtag);
 
     data.push_back("To permanently disable JTAG: set OTP JTAG_DISABLED fuse.");
-    data.push_back("Enable JTAG (development): dtoverlay=enable-jtag in config.txt");
+    data.push_back("Enable JTAG (development): dtoverlay=enable-jtag in kernel cmdline");
     data.push_back("PASS: JTAG security check complete.");
     {
         TestOutput _out;

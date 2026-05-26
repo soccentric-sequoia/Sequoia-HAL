@@ -9,9 +9,9 @@
 
 /**
  * @class SenseHatTesting
- * @brief Tests for the Raspberry Pi Sense HAT (V1 / V2).
+ * @brief Tests for the Sequoia x86 RT Sense HAT (V1 / V2).
  *
- * @details The Sense HAT attaches to the Pi 5 40-pin header and provides:
+ * @details The Sense HAT attaches to the Pi 5 expansion header and provides:
  *   - 8×8 RGB LED matrix  (rpi-sense-fb framebuffer or I2C ATtiny88 @ 0x46)
  *   - Temperature / Humidity sensor  (HTS221, I2C 0x5C, IIO)
  *   - Barometric pressure sensor     (LPS25H, I2C 0x5F, IIO)

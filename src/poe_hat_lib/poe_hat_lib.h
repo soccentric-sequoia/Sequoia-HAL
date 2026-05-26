@@ -9,9 +9,9 @@
 
 /**
  * @class PoeHatTesting
- * @brief Tests for the Raspberry Pi PoE+ HAT (or third-party PoE HAT).
+ * @brief Tests for the Sequoia x86 RT PoE+ HAT (or third-party PoE HAT).
  *
- * @details The official Raspberry Pi PoE+ HAT provides:
+ * @details The official Sequoia x86 RT PoE+ HAT provides:
  *   - IEEE 802.3at PoE+ (25.5 W) power delivery over Ethernet
  *   - Onboard 5V/5A DC-DC converter feeding the Pi via 4-pin header
  *   - Controllable brushless fan (PWM via ATtiny I2C controller @ 0x1A)
@@ -45,7 +45,7 @@ class PoeHatTesting : public TestBase
     /** @brief Check thermal trip point that triggers fan speed increase. */
     TestOutput testThermalProtection();
 
-    /** @brief Verify 5V rail stability via vcgencmd / power_supply sysfs. */
+    /** @brief Verify 5V rail stability via sequoia-sysmon / power_supply sysfs. */
     TestOutput testVoltageRegulator();
 
     /** @brief End-to-end power delivery: verify Pi runs under load from PoE. */

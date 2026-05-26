@@ -1,19 +1,19 @@
 /**
  * @file vision_accelerator_lib.cpp
- * @brief Vision accelerator tests for Raspberry Pi 5.
- *        Pi5 has NO NVIDIA PVA (Programmable Vision Accelerator) or dedicated
+ * @brief Vision accelerator tests for Sequoia x86 RT 5.
+ *        Sequoia has NO NVIDIA PVA (Programmable Vision Accelerator) or dedicated
  *        VLIW VPU.  Methods referencing VLIW slots, PVA power, etc. are
- *        Jetson-specific and are mapped to Pi5 equivalents:
+ *        Jetson-specific and are mapped to Sequoia equivalents:
  *          - "VPU" → VideoCore VII GPU (v3d kernel driver)
  *          - "Vector units" → Cortex-A76 NEON SIMD
- *          - "DMA engine" → BCM2712 DMA controllers
- *          - "Computer vision" → V4L2 ISP (bcm2835-isp) + OpenCV + TFLite
+ *          - "DMA engine" → x86 SoM DMA controllers
+ *          - "Computer vision" → V4L2 ISP (generic-isp) + OpenCV + TFLite
  * @author sandesh ghimire
  * @copyright (C) Lucid Motors
  */
 
 #include "vision_accelerator_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <chrono>
@@ -75,13 +75,13 @@ VisionAcceleratorTesting::~VisionAcceleratorTesting()
 }
 
 /**
- * @brief Dual VPU → Pi5 dual ARM cluster (4× Cortex-A76) + VideoCore VII GPU.
+ * @brief Dual VPU → Sequoia dual ARM cluster (4× Cortex-A76) + VideoCore VII GPU.
  */
 TestOutput VisionAcceleratorTesting::testDualVectorProcessingUnits()
 {
     std::vector<std::string> data;
-    data.push_back("=== Dual VPU (Pi5 Cortex-A76 NEON + VideoCore VII) ===");
-    data.push_back("[INFO] Pi5 has no dedicated NVIDIA PVA; VPU = Cortex-A76 + VideoCore VII");
+    data.push_back("=== Dual VPU (Sequoia Cortex-A76 NEON + VideoCore VII) ===");
+    data.push_back("[INFO] Sequoia has no dedicated NVIDIA PVA; VPU = Cortex-A76 + VideoCore VII");
 
     std::string cpuCount = vaRunCmd("grep -c 'processor' /proc/cpuinfo 2>/dev/null");
     data.push_back("[INFO] CPU cores (A76 NEON vector units): " + cpuCount);
@@ -90,7 +90,7 @@ TestOutput VisionAcceleratorTesting::testDualVectorProcessingUnits()
     data.push_back(v3dOk ? "[PASS] v3d (VideoCore VII GPU) module loaded"
                          : "[INFO] v3d module not found");
 
-    std::string gpuFreq = vaRunCmd("vcgencmd measure_clock v3d 2>/dev/null");
+    std::string gpuFreq = vaRunCmd("sequoia-sysmon measure_clock v3d 2>/dev/null");
     data.push_back("[INFO] v3d clock: " + (gpuFreq.empty() ? "N/A" : gpuFreq));
 
     {
@@ -134,14 +134,14 @@ TestOutput VisionAcceleratorTesting::testVectorCoresInEachVpu()
 }
 
 /**
- * @brief VLIW slots → N/A on Pi5 (Cortex-A76 is out-of-order superscalar, not VLIW).
+ * @brief VLIW slots → N/A on Sequoia (Cortex-A76 is out-of-order superscalar, not VLIW).
  */
 TestOutput VisionAcceleratorTesting::testVliwSlots()
 {
     std::vector<std::string> data;
-    data.push_back("=== VLIW Slots (Pi5 — N/A) ===");
+    data.push_back("=== VLIW Slots (Sequoia — N/A) ===");
     data.push_back("[INFO] Cortex-A76 is out-of-order superscalar; not VLIW");
-    data.push_back("[INFO] Pi5 issue width: 4-wide decode, 8-entry dispatch queue");
+    data.push_back("[INFO] Sequoia issue width: 4-wide decode, 8-entry dispatch queue");
     data.push_back("[INFO] For VLIW-style compute, use Hailo-8 (HailoRT compiler produces VLIW DSP code)");
 
     bool hailoOk = vaPathExists("/dev/hailo0");
@@ -175,7 +175,7 @@ TestOutput VisionAcceleratorTesting::testScalarExecutionUnits()
     std::string maxFreq = vaRunCmd("cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null");
     data.push_back("[INFO] CPU max freq: " +
                    (maxFreq.empty() ? "N/A" : std::to_string(std::stoi(maxFreq) / 1000) + " MHz") +
-                   " (rated " + std::to_string(RPI5_CPU_MAX_FREQ_MHZ) + " MHz)");
+                   " (rated " + std::to_string(X86RT_CPU_MAX_FREQ_MHZ) + " MHz)");
 
     {
         TestOutput _out;
@@ -194,7 +194,7 @@ TestOutput VisionAcceleratorTesting::testScalarExecutionUnits()
 TestOutput VisionAcceleratorTesting::testVectorExecutionUnits()
 {
     std::vector<std::string> data;
-    data.push_back("=== Vector Execution Units (Pi5 NEON FMAC throughput) ===");
+    data.push_back("=== Vector Execution Units (Sequoia NEON FMAC throughput) ===");
 
     static constexpr size_t SIZE = 64ULL * 1024 * 1024;
     std::vector<uint8_t> src(SIZE, 0x5A);
@@ -221,18 +221,18 @@ TestOutput VisionAcceleratorTesting::testVectorExecutionUnits()
 }
 
 /**
- * @brief DMA engine 1 — BCM2712 DMA controller (DMA4 / DMA-Lite channels).
+ * @brief DMA engine 1 — x86 SoM DMA controller (DMA4 / DMA-Lite channels).
  */
 TestOutput VisionAcceleratorTesting::testDmaEngine1Functionality()
 {
     std::vector<std::string> data;
-    data.push_back("=== DMA Engine 1 (Pi5 BCM2712 DMA4) ===");
+    data.push_back("=== DMA Engine 1 (Sequoia x86 SoM DMA4) ===");
 
     bool dmaPresent = !vaRunCmd("ls /sys/bus/platform/devices/ 2>/dev/null | grep -i dma | head -3").empty();
     data.push_back(dmaPresent ? "[PASS] DMA platform devices found"
                               : "[INFO] DMA platform devices not found");
 
-    std::string dmaMod = vaRunCmd("grep -c 'bcm2835-dma\\|bcm2712' /proc/modules 2>/dev/null");
+    std::string dmaMod = vaRunCmd("grep -c 'generic-dma\\|bcm2712' /proc/modules 2>/dev/null");
     data.push_back("[INFO] BCM DMA module count: " + dmaMod);
 
     {
@@ -246,20 +246,20 @@ TestOutput VisionAcceleratorTesting::testDmaEngine1Functionality()
 }
 
 /**
- * @brief DMA engine 2 — RP1 DMA controller for peripherals.
+ * @brief DMA engine 2 — platform I/O DMA controller for peripherals.
  */
 TestOutput VisionAcceleratorTesting::testDmaEngine2Functionality()
 {
     std::vector<std::string> data;
-    data.push_back("=== DMA Engine 2 (Pi5 RP1 DMA) ===");
-    data.push_back("[INFO] RP1 south-bridge has its own DMA engines for USB3, PCIe, SPI, UART");
+    data.push_back("=== DMA Engine 2 (Sequoia platform I/O DMA) ===");
+    data.push_back("[INFO] platform I/O south-bridge has its own DMA engines for USB3, PCIe, SPI, UART");
 
     std::string rp1Dma = vaRunCmd("dmesg 2>/dev/null | grep -i 'rp1.*dma' | head -2");
-    data.push_back(rp1Dma.empty() ? "[INFO] No RP1 DMA messages in dmesg"
-                                  : "[PASS] RP1 DMA: " + rp1Dma);
+    data.push_back(rp1Dma.empty() ? "[INFO] No platform I/O DMA messages in dmesg"
+                                  : "[PASS] platform I/O DMA: " + rp1Dma);
 
     std::string rp1Mod = vaRunCmd("grep -c '^rp1' /proc/modules 2>/dev/null");
-    data.push_back("[INFO] RP1 modules loaded: " + rp1Mod);
+    data.push_back("[INFO] platform I/O modules loaded: " + rp1Mod);
 
     {
         TestOutput _out;
@@ -277,7 +277,7 @@ TestOutput VisionAcceleratorTesting::testDmaEngine2Functionality()
 TestOutput VisionAcceleratorTesting::testDmaBandwidthTesting()
 {
     std::vector<std::string> data;
-    data.push_back("=== DMA Bandwidth (Pi5 LPDDR4X-4267) ===");
+    data.push_back("=== DMA Bandwidth (Sequoia LPDDR4X-4267) ===");
 
     static constexpr size_t MB128 = 128ULL * 1024 * 1024;
     std::vector<uint8_t> buf1(MB128, 0xAA);
@@ -291,7 +291,7 @@ TestOutput VisionAcceleratorTesting::testDmaBandwidthTesting()
     data.push_back("[PASS] DMA bandwidth proxy (memcpy 128 MB): " +
                    std::to_string(static_cast<int>(gbps * 1000)) + " MB/s  (" +
                    std::to_string(static_cast<int>(ms)) + " ms)");
-    data.push_back("[INFO] Pi5 theoretical LPDDR4X-4267 bandwidth: ~34 GB/s (dual-channel)");
+    data.push_back("[INFO] Sequoia theoretical LPDDR4X-4267 bandwidth: ~34 GB/s (dual-channel)");
 
     bool ok = gbps > 1.0;
     {
@@ -310,7 +310,7 @@ TestOutput VisionAcceleratorTesting::testDmaBandwidthTesting()
 TestOutput VisionAcceleratorTesting::testDmaLatencyTesting()
 {
     std::vector<std::string> data;
-    data.push_back("=== DMA Latency (Pi5) ===");
+    data.push_back("=== DMA Latency (Sequoia) ===");
 
     static constexpr size_t KB4 = 4096;
     uint8_t src[KB4], dst[KB4];
@@ -344,16 +344,16 @@ TestOutput VisionAcceleratorTesting::testDmaLatencyTesting()
 }
 
 /**
- * @brief Computer vision algorithms: check V4L2 ISP (bcm2835-isp) pipeline.
+ * @brief Computer vision algorithms: check V4L2 ISP (generic-isp) pipeline.
  */
 TestOutput VisionAcceleratorTesting::testComputerVisionAlgorithms()
 {
     std::vector<std::string> data;
-    data.push_back("=== Computer Vision Algorithms (Pi5 V4L2 ISP + OpenCV) ===");
+    data.push_back("=== Computer Vision Algorithms (Sequoia V4L2 ISP + OpenCV) ===");
 
-    bool ispOk = !vaRunCmd("grep -c 'bcm2835.isp' /proc/modules 2>/dev/null").empty();
-    data.push_back(ispOk ? "[PASS] bcm2835-isp V4L2 ISP available"
-                         : "[INFO] bcm2835-isp not detected");
+    bool ispOk = !vaRunCmd("grep -c 'generic.isp' /proc/modules 2>/dev/null").empty();
+    data.push_back(ispOk ? "[PASS] generic-isp V4L2 ISP available"
+                         : "[INFO] generic-isp not detected");
 
     std::string ocv = vaRunCmd("python3 -c 'import cv2; print(cv2.__version__)' 2>/dev/null");
     data.push_back(ocv.empty() ? "[INFO] OpenCV not installed (pip install opencv-python)"
@@ -381,7 +381,7 @@ TestOutput VisionAcceleratorTesting::testComputerVisionAlgorithms()
 TestOutput VisionAcceleratorTesting::testImageProcessingPipelines()
 {
     std::vector<std::string> data;
-    data.push_back("=== Image Processing Pipeline (Pi5 libcamera → ISP → V4L2) ===");
+    data.push_back("=== Image Processing Pipeline (Sequoia libcamera → ISP → V4L2) ===");
 
     std::string lc = vaRunCmd("libcamera-hello --list-cameras 2>/dev/null | head -3");
     data.push_back(lc.empty() ? "[INFO] libcamera not available or no cameras"
@@ -390,8 +390,8 @@ TestOutput VisionAcceleratorTesting::testImageProcessingPipelines()
     std::string gst = vaRunCmd("gst-launch-1.0 --version 2>/dev/null | head -1");
     data.push_back(gst.empty() ? "[INFO] GStreamer not found" : "[PASS] " + gst);
 
-    data.push_back("[INFO] Pi5 ISP pipeline: Sensor → MIPI D-PHY → Unicam → bcm2835-isp");
-    data.push_back("[INFO]   bcm2835-isp stages: debayer, ALSC, AGC, AWB, denoise, sharpen");
+    data.push_back("[INFO] Sequoia ISP pipeline: Sensor → MIPI D-PHY → Unicam → generic-isp");
+    data.push_back("[INFO]   generic-isp stages: debayer, ALSC, AGC, AWB, denoise, sharpen");
 
     {
         TestOutput _out;
@@ -409,7 +409,7 @@ TestOutput VisionAcceleratorTesting::testImageProcessingPipelines()
 TestOutput VisionAcceleratorTesting::testFeatureDetection()
 {
     std::vector<std::string> data;
-    data.push_back("=== Feature Detection (Pi5 OpenCV FAST/ORB) ===");
+    data.push_back("=== Feature Detection (Sequoia OpenCV FAST/ORB) ===");
 
     std::string ocv = vaRunCmd("python3 -c 'import cv2; print(cv2.__version__)' 2>/dev/null");
     if (ocv.empty())
@@ -452,7 +452,7 @@ TestOutput VisionAcceleratorTesting::testFeatureDetection()
 TestOutput VisionAcceleratorTesting::testOpticalFlow()
 {
     std::vector<std::string> data;
-    data.push_back("=== Optical Flow (Pi5 OpenCV Farneback) ===");
+    data.push_back("=== Optical Flow (Sequoia OpenCV Farneback) ===");
 
     std::string ocv = vaRunCmd("python3 -c 'import cv2; print(cv2.__version__)' 2>/dev/null");
     if (ocv.empty())
@@ -495,7 +495,7 @@ TestOutput VisionAcceleratorTesting::testOpticalFlow()
 TestOutput VisionAcceleratorTesting::testStereoDisparity()
 {
     std::vector<std::string> data;
-    data.push_back("=== Stereo Disparity (Pi5 OpenCV StereoBM) ===");
+    data.push_back("=== Stereo Disparity (Sequoia OpenCV StereoBM) ===");
 
     std::string ocv = vaRunCmd("python3 -c 'import cv2; print(cv2.__version__)' 2>/dev/null");
     if (ocv.empty())
@@ -534,26 +534,26 @@ TestOutput VisionAcceleratorTesting::testStereoDisparity()
 }
 
 /**
- * @brief PVA power consumption → N/A on Pi5; checks VideoCore VII power.
+ * @brief PVA power consumption → N/A on Sequoia; checks VideoCore VII power.
  */
 TestOutput VisionAcceleratorTesting::testPvaPowerConsumption()
 {
     std::vector<std::string> data;
-    data.push_back("=== Vision Accelerator Power (Pi5 VideoCore VII / v3d) ===");
-    data.push_back("[INFO] Pi5 has no NVIDIA PVA; VideoCore VII is the vision compute IP");
+    data.push_back("=== Vision Accelerator Power (Sequoia VideoCore VII / v3d) ===");
+    data.push_back("[INFO] Sequoia has no NVIDIA PVA; VideoCore VII is the vision compute IP");
 
-    std::string v3dFreq = vaRunCmd("vcgencmd measure_clock v3d 2>/dev/null");
+    std::string v3dFreq = vaRunCmd("sequoia-sysmon measure_clock v3d 2>/dev/null");
     data.push_back("[INFO] v3d clock: " + (v3dFreq.empty() ? "N/A" : v3dFreq));
 
-    std::string vCore = vaRunCmd("vcgencmd measure_volts core 2>/dev/null");
+    std::string vCore = vaRunCmd("sequoia-sysmon measure_volts core 2>/dev/null");
     data.push_back("[INFO] Core voltage: " + (vCore.empty() ? "N/A" : vCore));
 
-    std::string throttle = vaRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = vaRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool clean = !throttle.empty() && throttle == "throttled=0x0";
     data.push_back(clean ? "[PASS] No throttle (SoC within power budget)"
                          : "[INFO] Throttle: " + throttle);
 
-    data.push_back("[INFO] Pi5 BCM2712 rated for 5W typical (25°C, default clock)");
+    data.push_back("[INFO] Sequoia x86 SoM rated for 5W typical (25°C, default clock)");
     data.push_back("[INFO] For Hailo-8 vision accelerator power: ~2 W typical, 10 W peak");
 
     {
@@ -567,16 +567,16 @@ TestOutput VisionAcceleratorTesting::testPvaPowerConsumption()
 }
 
 /**
- * @brief 5-dimensional addressing (N/A on Pi5) — DMA multi-dim stride proxy.
+ * @brief 5-dimensional addressing (N/A on Sequoia) — DMA multi-dim stride proxy.
  * @details Jetson PVA DMA supports 5D addressing (N/C/D/H/W strides).
- *          Pi5 DMA4 supports 2D stride (rows × cols).  Documents limitation.
+ *          Sequoia DMA4 supports 2D stride (rows × cols).  Documents limitation.
  */
 TestOutput VisionAcceleratorTesting::test5dimensionalAddressing()
 {
     std::vector<std::string> data;
-    data.push_back("=== 5D Addressing (Pi5 DMA4 2D stride proxy) ===");
-    data.push_back("[INFO] Jetson PVA DMA supports N/C/D/H/W 5D addressing; Pi5 DMA4 = 2D");
-    data.push_back("[INFO] Pi5 DMA4: src_inc, src_width, dst_inc, dst_width (2D scatter-gather)");
+    data.push_back("=== 5D Addressing (Sequoia DMA4 2D stride proxy) ===");
+    data.push_back("[INFO] Jetson PVA DMA supports N/C/D/H/W 5D addressing; Sequoia DMA4 = 2D");
+    data.push_back("[INFO] Sequoia DMA4: src_inc, src_width, dst_inc, dst_width (2D scatter-gather)");
 
     std::string dmaInfo = vaRunCmd(
         "ls /sys/bus/platform/devices/ 2>/dev/null | grep -i 'dma\\|dma4' | head -3");
@@ -594,20 +594,20 @@ TestOutput VisionAcceleratorTesting::test5dimensionalAddressing()
 }
 
 /**
- * @brief 16 hardware DMA channels per engine (Pi5 DMA4 has 8 channels per SoC block).
+ * @brief 16 hardware DMA channels per engine (Sequoia DMA4 has 8 channels per SoC block).
  */
 TestOutput VisionAcceleratorTesting::test16HardwareChannelsPerEngine()
 {
     std::vector<std::string> data;
-    data.push_back("=== 16 HW DMA Channels (Pi5 DMA4 8-ch proxy) ===");
-    data.push_back("[INFO] Jetson PVA DMA engines have 16 hw channels; Pi5 DMA4 has 8 channels");
+    data.push_back("=== 16 HW DMA Channels (Sequoia DMA4 8-ch proxy) ===");
+    data.push_back("[INFO] Jetson PVA DMA engines have 16 hw channels; Sequoia DMA4 has 8 channels");
 
     std::string dmaChans = vaRunCmd(
         "cat /sys/kernel/debug/dma_api/num_allocs 2>/dev/null");
     data.push_back(dmaChans.empty() ? "[INFO] DMA channel debug not accessible (need root)"
                                     : "[INFO] DMA alloc count: " + dmaChans);
 
-    data.push_back("[INFO] BCM2712 DMA4: 8 channels @ 400 MHz, 32-bit address, 128-bit bus");
+    data.push_back("[INFO] x86 SoM DMA4: 8 channels @ 400 MHz, 32-bit address, 128-bit bus");
     {
         TestOutput _out;
         _out.status = hal::Status::PASS;

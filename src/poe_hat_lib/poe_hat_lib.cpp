@@ -1,21 +1,21 @@
 /**
  * @file poe_hat_lib.cpp
- * @brief Raspberry Pi PoE+ HAT tests for Raspberry Pi 5.
+ * @brief Sequoia x86 RT PoE+ HAT tests for Sequoia x86 RT 5.
  *
- * Hardware: Raspberry Pi PoE+ HAT (or compatible) on 40-pin header.
+ * Hardware: Sequoia x86 RT PoE+ HAT (or compatible) on expansion header.
  *   PoE standard : IEEE 802.3at (Type 2, PoE+, up to 25.5 W)
  *   DC-DC        : 5V / 5A synchronous buck on HAT, feeds Pi via GPIO header
- *   Fan ctrl     : ATtiny on I2C @ 0x1A (RPi PoE HAT), sysfs fan node
+ *   Fan ctrl     : ATtiny on I2C @ 0x1A (Sequoia PoE HAT), sysfs fan node
  *   Power sense  : Optional INA219/INA226 on I2C (third-party HATs)
- *   Eth link     : Pi5 GbE (BCM2712 MAC + BCM54213PE PHY) — PoE on eth0
+ *   Eth link     : Sequoia GbE (x86 SoM MAC + Bx86 SoM4213PE PHY) — PoE on eth0
  *
- * Tests use hwmon sysfs, I2C tools, ethtool, vcgencmd, and thermal sysfs.
+ * Tests use hwmon sysfs, I2C tools, ethtool, sequoia-sysmon, and thermal sysfs.
  * @author sandesh ghimire
  * @copyright (C) Lucid Motors
  */
 
 #include "poe_hat_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <cstdio>
@@ -87,8 +87,8 @@ PoeHatTesting::~PoeHatTesting() {}
 TestOutput PoeHatTesting::testPoeHatDetection()
 {
     std::vector<std::string> data;
-    data.push_back("=== PoE HAT Detection (Pi5) ===");
-    data.push_back("[INFO] Official RPi PoE+ HAT: fan ctrl @ I2C-1 0x1A");
+    data.push_back("=== PoE HAT Detection (Sequoia) ===");
+    data.push_back("[INFO] Official Sequoia PoE+ HAT: fan ctrl @ I2C-1 0x1A");
     data.push_back("[INFO] Third-party HATs may expose INA219 @ 0x40 or INA226 @ 0x40-0x4F");
 
     bool i2c1 = poePathExists("/dev/i2c-1");
@@ -136,18 +136,18 @@ TestOutput PoeHatTesting::testPoePowerNegotiation()
 {
     std::vector<std::string> data;
     data.push_back("=== PoE Power Negotiation (IEEE 802.3at) ===");
-    data.push_back("[INFO] Pi5 receives power over " + std::string(RPI5_ETH_IFACE) + " from PoE switch/injector");
+    data.push_back("[INFO] Sequoia receives power over " + std::string(X86RT_ETH_IFACE) + " from PoE switch/injector");
 
     // Check eth0 link is up
     std::string operstate = poeReadFile(
-        "/sys/class/net/" + std::string(RPI5_ETH_IFACE) + "/operstate");
+        "/sys/class/net/" + std::string(X86RT_ETH_IFACE) + "/operstate");
     bool linkUp = operstate == "up";
-    data.push_back(linkUp ? "[PASS] " + std::string(RPI5_ETH_IFACE) + " link up (PoE carrier present)"
-                          : "[INFO] " + std::string(RPI5_ETH_IFACE) + " operstate: " + operstate);
+    data.push_back(linkUp ? "[PASS] " + std::string(X86RT_ETH_IFACE) + " link up (PoE carrier present)"
+                          : "[INFO] " + std::string(X86RT_ETH_IFACE) + " operstate: " + operstate);
 
     // ethtool: check speed and duplex
     std::string ethSpeed = poeRunCmd(
-        "ethtool " + std::string(RPI5_ETH_IFACE) + " 2>/dev/null | grep -E 'Speed|Duplex|Link'");
+        "ethtool " + std::string(X86RT_ETH_IFACE) + " 2>/dev/null | grep -E 'Speed|Duplex|Link'");
     if (!ethSpeed.empty())
         data.push_back("[INFO] ethtool:\n" + ethSpeed);
 
@@ -156,8 +156,8 @@ TestOutput PoeHatTesting::testPoePowerNegotiation()
     if (!dmesgPoe.empty())
         data.push_back("[INFO] PoE dmesg: " + dmesgPoe);
 
-    // Check vcgencmd for under-voltage (indicates PoE supply is insufficient)
-    std::string throttle = poeRunCmd("vcgencmd get_throttled 2>/dev/null");
+    // Check sequoia-sysmon for under-voltage (indicates PoE supply is insufficient)
+    std::string throttle = poeRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool underVolt = !throttle.empty() && throttle != "throttled=0x0";
     data.push_back(underVolt ? "[WARN] Throttle flags set: " + throttle +
                                " (possible under-voltage from PoE)"
@@ -205,14 +205,14 @@ TestOutput PoeHatTesting::testPowerMonitoring()
     if (!found)
     {
         data.push_back("[INFO] No INA219/226 hwmon found");
-        // Fallback: vcgencmd measure_volts
-        std::string vCore = poeRunCmd("vcgencmd measure_volts core 2>/dev/null");
-        std::string v5    = poeRunCmd("vcgencmd measure_volts usb  2>/dev/null");
-        data.push_back("[INFO] vcgencmd core: " + (vCore.empty() ? "N/A" : vCore));
-        data.push_back("[INFO] vcgencmd usb:  " + (v5.empty()    ? "N/A" : v5));
+        // Fallback: sequoia-sysmon measure_volts
+        std::string vCore = poeRunCmd("sequoia-sysmon measure_volts core 2>/dev/null");
+        std::string v5    = poeRunCmd("sequoia-sysmon measure_volts usb  2>/dev/null");
+        data.push_back("[INFO] sequoia-sysmon core: " + (vCore.empty() ? "N/A" : vCore));
+        data.push_back("[INFO] sequoia-sysmon usb:  " + (v5.empty()    ? "N/A" : v5));
     }
 
-    data.push_back("[INFO] PoE+ budget: 25.5 W input, ~5V × 5A = 25 W to Pi5 GPIO header");
+    data.push_back("[INFO] PoE+ budget: 25.5 W input, ~5V × 5A = 25 W to Sequoia GPIO header");
     {
         TestOutput _out;
         _out.status = hal::Status::PASS;
@@ -267,7 +267,7 @@ TestOutput PoeHatTesting::testFanControl()
         else
         {
             data.push_back("[INFO] No PoE HAT fan control found in hwmon or thermal cooling devices");
-            data.push_back("[INFO] Ensure dtoverlay=rpi-poe-fan is in /boot/firmware/config.txt");
+            data.push_back("[INFO] Ensure dtoverlay=rpi-poe-fan is in /boot/firmware/kernel cmdline");
         }
     }
 
@@ -318,20 +318,20 @@ TestOutput PoeHatTesting::testFanSpeed()
 }
 
 /**
- * @brief Check Pi5 thermal trip point that triggers fan speed increase.
+ * @brief Check Sequoia thermal trip point that triggers fan speed increase.
  */
 TestOutput PoeHatTesting::testThermalProtection()
 {
     std::vector<std::string> data;
-    data.push_back("=== PoE HAT Thermal Protection (Pi5 trip points) ===");
+    data.push_back("=== PoE HAT Thermal Protection (Sequoia trip points) ===");
 
     // Read CPU temp
     std::string tempRaw = poeReadFile(
-        std::string(RPI5_THERMAL_CPU_ZONE) + "/temp");
+        std::string(X86RT_THERMAL_CPU_ZONE) + "/temp");
     double tempC = tempRaw.empty() ? 0.0 : std::stod(tempRaw) / 1000.0;
     data.push_back("[INFO] CPU temperature: " + std::to_string(tempC) + " °C");
-    data.push_back("[INFO] Pi5 throttle threshold: " + std::to_string(RPI5_THERMAL_THROTTLE_C) + " °C");
-    data.push_back("[INFO] Pi5 shutdown threshold: " + std::to_string(RPI5_THERMAL_SHUTDOWN_C) + " °C");
+    data.push_back("[INFO] Sequoia throttle threshold: " + std::to_string(X86RT_THERMAL_THROTTLE_C) + " °C");
+    data.push_back("[INFO] Sequoia shutdown threshold: " + std::to_string(X86RT_THERMAL_SHUTDOWN_C) + " °C");
 
     // Fan trip points from thermal zone
     std::string trips = poeRunCmd(
@@ -340,7 +340,7 @@ TestOutput PoeHatTesting::testThermalProtection()
         data.push_back("[INFO] Trip point temps (m°C): " + trips);
 
     // Check throttle
-    std::string throttle = poeRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = poeRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool ok = !throttle.empty() && throttle == "throttled=0x0";
     data.push_back(ok ? "[PASS] No throttle (temps within limits)"
                       : "[INFO] Throttle status: " + throttle);
@@ -356,7 +356,7 @@ TestOutput PoeHatTesting::testThermalProtection()
 }
 
 /**
- * @brief Verify 5V rail is within range using vcgencmd / power sysfs.
+ * @brief Verify 5V rail is within range using sequoia-sysmon / power sysfs.
  */
 TestOutput PoeHatTesting::testVoltageRegulator()
 {
@@ -364,13 +364,13 @@ TestOutput PoeHatTesting::testVoltageRegulator()
     data.push_back("=== PoE HAT Voltage Regulator (5V output) ===");
     data.push_back("[INFO] PoE+ HAT DC-DC: synchronous buck, 5V / 5A = 25 W, ≥88% efficiency");
 
-    std::string vCore = poeRunCmd("vcgencmd measure_volts core 2>/dev/null");
-    std::string vSDRAM = poeRunCmd("vcgencmd measure_volts sdram_c 2>/dev/null");
+    std::string vCore = poeRunCmd("sequoia-sysmon measure_volts core 2>/dev/null");
+    std::string vSDRAM = poeRunCmd("sequoia-sysmon measure_volts sdram_c 2>/dev/null");
     data.push_back("[INFO] Core voltage: " + (vCore.empty() ? "N/A" : vCore));
     data.push_back("[INFO] SDRAM voltage: " + (vSDRAM.empty() ? "N/A" : vSDRAM));
 
     // Check under-voltage bit in throttle flags
-    std::string throttle = poeRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = poeRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool underVolt = false;
     if (!throttle.empty())
     {
@@ -404,7 +404,7 @@ TestOutput PoeHatTesting::testPowerDelivery()
 
     // Pre-stress temperature
     std::string tempBefore = poeReadFile(
-        std::string(RPI5_THERMAL_CPU_ZONE) + "/temp");
+        std::string(X86RT_THERMAL_CPU_ZONE) + "/temp");
     data.push_back("[INFO] CPU temp before stress: " +
                    (tempBefore.empty() ? "N/A" : std::to_string(std::stod(tempBefore) / 1000.0) + " °C"));
 
@@ -415,18 +415,18 @@ TestOutput PoeHatTesting::testPowerDelivery()
     data.push_back("[INFO] Load: " + (stressOut.empty() ? "stress-ng not available" : stressOut));
 
     // Post-stress throttle check
-    std::string throttle = poeRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = poeRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool ok = !throttle.empty() && throttle == "throttled=0x0";
     data.push_back(ok ? "[PASS] No throttle under load — PoE supply sufficient"
                       : "[WARN] Throttle after load: " + throttle);
 
     // Post-stress temperature
     std::string tempAfter = poeReadFile(
-        std::string(RPI5_THERMAL_CPU_ZONE) + "/temp");
+        std::string(X86RT_THERMAL_CPU_ZONE) + "/temp");
     data.push_back("[INFO] CPU temp after stress: " +
                    (tempAfter.empty() ? "N/A" : std::to_string(std::stod(tempAfter) / 1000.0) + " °C"));
 
-    data.push_back("[INFO] PoE+ HAT rated for Pi5 maximum load (~8-9 W CPU full load)");
+    data.push_back("[INFO] PoE+ HAT rated for Sequoia maximum load (~8-9 W CPU full load)");
     {
         TestOutput _out;
         _out.status = hal::Status::PASS;

@@ -109,6 +109,12 @@ class SystemIntegrationTesting : public TestBase
     TestOutput testSensorFusionPipeline();
 
     /**
+     * @brief Validate RT isolation and optional hypervisor partition configuration.
+     * @return TestOutput with pass/fail and detected configuration
+     */
+    TestOutput testRtPartitionConfiguration();
+
+    /**
      * @brief Get list of all available test names
      * @return Vector of test names
      */

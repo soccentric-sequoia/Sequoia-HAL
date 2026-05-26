@@ -109,6 +109,12 @@ class FunctionalSafetyTesting : public TestBase
     TestOutput testAsilQsLAndRRailIsolation();
 
     /**
+     * @brief Inject a partition-local fault and verify host partition remains healthy.
+     * @return TestOutput with pass/fail and isolation evidence
+     */
+    TestOutput testPartitionFaultHandling();
+
+    /**
      * @brief Get list of all available test names
      * @return Vector of test names
      */

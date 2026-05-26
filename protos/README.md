@@ -1,6 +1,6 @@
 # HAL Proto Layer
 
-Protocol Buffer + gRPC definitions for the Acadia HAL Independent Validation & Verification suite.
+Protocol Buffer + gRPC definitions for the Sequoia HAL Independent Validation & Verification suite.
 
 ---
 

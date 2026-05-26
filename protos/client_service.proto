@@ -1,5 +1,5 @@
 // client_service.proto — bidirectional streaming protocol between
-// the Acadia Client (on-target) and the Acadia Server (x86).
+// the Sequoia Client (on-target) and the Sequoia Server (x86).
 //
 // Design: one persistent bidi stream per client process; all runs multiplex
 // on that single stream keyed by run_id.  The Server side initiates run

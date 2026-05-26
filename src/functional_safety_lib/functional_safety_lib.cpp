@@ -1,25 +1,28 @@
 /**
  * @file functional_safety_lib.cpp
- * @brief Functional safety tests for Raspberry Pi 5 (BCM2712).
- *        Pi5 is a commercial SBC and is NOT rated for automotive ASIL-D or
+ * @brief Functional safety tests for Sequoia x86 RT 5 (x86 SoM).
+ *        Sequoia is a commercial SBC and is NOT rated for automotive ASIL-D or
  *        IEC 61508 SIL-3.  These tests document the available safety-relevant
  *        features (watchdog, ECC proxy, thermal shutdown, PMIC brownout) and
- *        map Jetson-specific tests (lockstep CPU, ASIL rails) to Pi5 equivalents.
+ *        map Jetson-specific tests (lockstep CPU, ASIL rails) to Sequoia equivalents.
  * @author sandesh ghimire
  * @copyright (C) Lucid Motors
  */
 
 #include "functional_safety_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
+#include "../rt_engine.h"
 
 #include <array>
 #include <cstdio>
 #include <fcntl.h>
 #include <fstream>
+#include <signal.h>
 #include <sstream>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
@@ -72,21 +75,21 @@ FunctionalSafetyTesting::~FunctionalSafetyTesting()
 }
 
 /**
- * @brief Lockstep CPU test proxy (Pi5 does not have hardware lockstep).
- * @details BCM2712 Cortex-A76 does not implement lockstep CPU execution.
+ * @brief Lockstep CPU test proxy (Sequoia does not have hardware lockstep).
+ * @details x86 SoM Cortex-A76 does not implement lockstep CPU execution.
  *          This test documents the limitation and verifies the kernel watchdog
- *          (RP1 hardware watchdog) as the closest safety-relevant substitute.
+ *          (platform I/O hardware watchdog) as the closest safety-relevant substitute.
  */
 TestOutput FunctionalSafetyTesting::testLockstepCpuOperation()
 {
     std::vector<std::string> data;
-    data.push_back("=== CPU Lockstep (Pi5 BCM2712) ===");
-    data.push_back("[INFO] Pi5 Cortex-A76 does NOT implement hardware CPU lockstep");
-    data.push_back("[INFO] For ASIL-C/D lockstep requirement, use dedicated MCU (e.g. RP2040 HAT)");
+    data.push_back("=== CPU Lockstep (Sequoia x86 SoM) ===");
+    data.push_back("[INFO] Sequoia Cortex-A76 does NOT implement hardware CPU lockstep");
+    data.push_back("[INFO] For ASIL-C/D lockstep requirement, use dedicated MCU (e.g. software RT engine HAT)");
 
-    // Check RP1 watchdog as a lockstep substitute
+    // Check platform I/O watchdog as a lockstep substitute
     bool wdPresent = fsPathExists("/dev/watchdog0");
-    data.push_back(wdPresent ? "[PASS] RP1 hardware watchdog /dev/watchdog0 present (safety monitor)"
+    data.push_back(wdPresent ? "[PASS] platform I/O hardware watchdog /dev/watchdog0 present (safety monitor)"
                              : "[WARN] /dev/watchdog0 not found — watchdog driver not loaded");
 
     // Check if systemd-watchdog is active
@@ -108,17 +111,17 @@ TestOutput FunctionalSafetyTesting::testLockstepCpuOperation()
 }
 
 /**
- * @brief ECC memory test proxy (Pi5 LPDDR4X has no on-die ECC).
- * @details BCM2712 uses standard LPDDR4X-4267 without ECC.  This test
+ * @brief ECC memory test proxy (Sequoia LPDDR4X has no on-die ECC).
+ * @details x86 SoM uses standard LPDDR4X-4267 without ECC.  This test
  *          documents the limitation and verifies that pstore/crash records
  *          are absent (proxy for memory integrity).
  */
 TestOutput FunctionalSafetyTesting::testEccOnMemories()
 {
     std::vector<std::string> data;
-    data.push_back("=== ECC Memory (Pi5 LPDDR4X-4267) ===");
-    data.push_back("[INFO] Pi5 BCM2712 LPDDR4X has NO hardware ECC");
-    data.push_back("[INFO] For ECC, use Raspberry Pi CM5 Lite with ECC LPDDR5 carrier (future)");
+    data.push_back("=== ECC Memory (Sequoia LPDDR4X-4267) ===");
+    data.push_back("[INFO] Sequoia x86 SoM LPDDR4X has NO hardware ECC");
+    data.push_back("[INFO] For ECC, use Sequoia x86 RT x86 SoM Lite with ECC LPDDR5 carrier (future)");
 
     // pstore as memory-error proxy
     std::string pstoreFiles = fsRunCmd("ls /sys/fs/pstore/ 2>/dev/null | wc -l");
@@ -130,7 +133,7 @@ TestOutput FunctionalSafetyTesting::testEccOnMemories()
     bool edacPresent = fsPathExists("/sys/bus/platform/drivers/edac_mpc85xx") ||
                        !fsRunCmd("ls /sys/devices/system/edac/ 2>/dev/null").empty();
     data.push_back(edacPresent ? "[INFO] EDAC subsystem present"
-                               : "[INFO] No EDAC subsystem (expected on Pi5)");
+                               : "[INFO] No EDAC subsystem (expected on Sequoia)");
 
     // Memory test utility
     std::string memtest = fsRunCmd("which memtester 2>/dev/null");
@@ -148,15 +151,15 @@ TestOutput FunctionalSafetyTesting::testEccOnMemories()
 }
 
 /**
- * @brief Redundant power supplies test (Pi5 single USB-C input).
- * @details Pi5 uses a single USB-C 5V input; there is no redundant power path.
+ * @brief Redundant power supplies test (Sequoia single USB-C input).
+ * @details Sequoia uses a single USB-C 5V input; there is no redundant power path.
  *          Tests check for UPS HAT or multiple power_supply entries.
  */
 TestOutput FunctionalSafetyTesting::testRedundantPowerSupplies()
 {
     std::vector<std::string> data;
-    data.push_back("=== Redundant Power Supplies (Pi5) ===");
-    data.push_back("[INFO] Pi5 has single USB-C 5V input — no native power redundancy");
+    data.push_back("=== Redundant Power Supplies (Sequoia) ===");
+    data.push_back("[INFO] Sequoia has single USB-C 5V input — no native power redundancy");
 
     // Check for UPS HAT power supply entries
     std::string psList = fsRunCmd("ls /sys/class/power_supply/ 2>/dev/null");
@@ -176,7 +179,7 @@ TestOutput FunctionalSafetyTesting::testRedundantPowerSupplies()
     }
 
     // Under-voltage flag (proxy for PSU health)
-    std::string throttle = fsRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = fsRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     bool uvOk = !throttle.empty() && throttle == "throttled=0x0";
     data.push_back(uvOk ? "[PASS] No under-voltage flags"
                         : "[INFO] Throttle: " + throttle);
@@ -198,7 +201,7 @@ TestOutput FunctionalSafetyTesting::testRedundantPowerSupplies()
 TestOutput FunctionalSafetyTesting::testSafetyMonitoring()
 {
     std::vector<std::string> data;
-    data.push_back("=== Safety Monitoring (Pi5 RP1 Watchdog + PMIC) ===");
+    data.push_back("=== Safety Monitoring (Sequoia platform I/O Watchdog + PMIC) ===");
 
     // Hardware watchdog
     bool wdOk = fsPathExists("/dev/watchdog0");
@@ -206,7 +209,7 @@ TestOutput FunctionalSafetyTesting::testSafetyMonitoring()
                         : "[WARN] Watchdog device not found");
 
     // PMIC under-voltage / over-temp
-    std::string throttle = fsRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttle = fsRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     if (!throttle.empty())
     {
         bool clean = throttle == "throttled=0x0";
@@ -235,22 +238,22 @@ TestOutput FunctionalSafetyTesting::testSafetyMonitoring()
 }
 
 /**
- * @brief Diagnostic coverage check: test coverage of critical Pi5 subsystems.
+ * @brief Diagnostic coverage check: test coverage of critical Sequoia subsystems.
  */
 TestOutput FunctionalSafetyTesting::testDiagnosticCoverage()
 {
     std::vector<std::string> data;
-    data.push_back("=== Diagnostic Coverage (Pi5) ===");
+    data.push_back("=== Diagnostic Coverage (Sequoia) ===");
 
     // List what is testable
     static const std::vector<std::pair<std::string, std::string>> checks = {
-        {"/dev/watchdog0",                     "RP1 hardware watchdog"},
-        {"/sys/class/thermal/thermal_zone0",   "BCM2712 thermal zone"},
-        {"/sys/class/thermal/thermal_zone1",   "RP1 thermal zone"},
+        {"/dev/watchdog0",                     "platform I/O hardware watchdog"},
+        {"/sys/class/thermal/thermal_zone0",   "x86 SoM thermal zone"},
+        {"/sys/class/thermal/thermal_zone1",   "platform I/O thermal zone"},
         {"/sys/devices/system/cpu/cpu0/cpufreq","CPUfreq + throttle detection"},
         {"/sys/class/hwmon",                   "hwmon (PMIC/temp sensors)"},
         {"/sys/block/mmcblk0",                 "eMMC/SD storage"},
-        {RPI5_GPIOCHIP_PATH,                   "GPIO controller"},
+        {X86RT_GPIOCHIP_PATH,                   "GPIO controller"},
     };
 
     int present = 0;
@@ -287,7 +290,7 @@ TestOutput FunctionalSafetyTesting::testDiagnosticCoverage()
 TestOutput FunctionalSafetyTesting::testFaultInjectionTesting()
 {
     std::vector<std::string> data;
-    data.push_back("=== Fault Injection (Pi5 Proxy) ===");
+    data.push_back("=== Fault Injection (Sequoia Proxy) ===");
     data.push_back("[INFO] Hardware fault injection requires JTAG; software proxy used");
 
     // Watchdog boot status (detects prior watchdog-triggered resets)
@@ -334,7 +337,7 @@ TestOutput FunctionalSafetyTesting::testFaultInjectionTesting()
 TestOutput FunctionalSafetyTesting::testFailsafeBehavior()
 {
     std::vector<std::string> data;
-    data.push_back("=== Fail-Safe Behaviour (Pi5) ===");
+    data.push_back("=== Fail-Safe Behaviour (Sequoia) ===");
 
     // Thermal critical trip (shutdown at 85 °C)
     std::string critTrip = fsRunCmd(
@@ -351,8 +354,8 @@ TestOutput FunctionalSafetyTesting::testFailsafeBehavior()
     data.push_back(wdPresent ? "[PASS] Hardware watchdog available for fail-safe reset"
                              : "[WARN] No watchdog device");
 
-    // vcgencmd throttled current state
-    std::string throttle = fsRunCmd("vcgencmd get_throttled 2>/dev/null");
+    // sequoia-sysmon throttled current state
+    std::string throttle = fsRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     data.push_back("[INFO] Current throttle: " + (throttle.empty() ? "N/A" : throttle));
 
     // Confirm systemd reboot target exists
@@ -372,15 +375,15 @@ TestOutput FunctionalSafetyTesting::testFailsafeBehavior()
 }
 
 /**
- * @brief ASIL QS-L / QS-R rail isolation test (N/A on Pi5).
- * @details Pi5 BCM2712 / MXL7704 PMIC has no ASIL-rated isolated voltage rails.
+ * @brief ASIL QS-L / QS-R rail isolation test (N/A on Sequoia).
+ * @details Sequoia x86 SoM / MXL7704 PMIC has no ASIL-rated isolated voltage rails.
  *          Documents the limitation and checks available hwmon voltage inputs.
  */
 TestOutput FunctionalSafetyTesting::testAsilQsLAndRRailIsolation()
 {
     std::vector<std::string> data;
-    data.push_back("=== ASIL QS-L/R Rail Isolation (Pi5) ===");
-    data.push_back("[INFO] Pi5 MXL7704 PMIC has NO ASIL-rated isolated supply rails");
+    data.push_back("=== ASIL QS-L/R Rail Isolation (Sequoia) ===");
+    data.push_back("[INFO] Sequoia MXL7704 PMIC has NO ASIL-rated isolated supply rails");
     data.push_back("[INFO] For ASIL-D power, use Infineon TDA38640 or NXP FS84/FS85 PMIC");
 
     // Enumerate available hwmon voltage inputs as best-effort
@@ -392,11 +395,11 @@ TestOutput FunctionalSafetyTesting::testAsilQsLAndRRailIsolation()
     data.push_back(voltages.empty() ? "[INFO] No hwmon voltage inputs found"
                                     : "[INFO] hwmon voltages:\n" + voltages);
 
-    // vcgencmd voltage readings
+    // sequoia-sysmon voltage readings
     static const std::vector<std::string> rails = {"core", "sdram_c", "sdram_i", "sdram_p"};
     for (const auto& rail : rails)
     {
-        std::string v = fsRunCmd("vcgencmd measure_volts " + rail + " 2>/dev/null");
+        std::string v = fsRunCmd("sequoia-sysmon measure_volts " + rail + " 2>/dev/null");
         if (!v.empty())
             data.push_back("[INFO] " + rail + ": " + v);
     }
@@ -405,6 +408,54 @@ TestOutput FunctionalSafetyTesting::testAsilQsLAndRRailIsolation()
         TestOutput _out;
         _out.status = hal::Status::PASS;
         _out.severity = hal::Severity::INFO;
+        for (size_t _i = 0; _i < data.size(); ++_i)
+            _out.reason["detail_" + std::to_string(_i)] = data[_i];
+        return _out;
+    }
+}
+
+TestOutput FunctionalSafetyTesting::testPartitionFaultHandling()
+{
+    std::vector<std::string> data;
+    bool passed = true;
+
+    const bool hv = rt_engine::hypervisor_present();
+    data.push_back(std::string("Hypervisor context: ") + (hv ? "detected" : "not-detected"));
+    data.push_back("Fault model: terminate child partition process with SIGSEGV");
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        passed = false;
+        data.push_back("FAIL: fork() failed for partition fault injection.");
+    } else if (pid == 0) {
+        raise(SIGSEGV);
+        _exit(1);
+    } else {
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            passed = false;
+            data.push_back("FAIL: waitpid failed while monitoring faulted partition.");
+        } else {
+            const bool signaled = WIFSIGNALED(status);
+            const int sig = signaled ? WTERMSIG(status) : 0;
+            data.push_back(std::string("Child partition terminated by signal: ") + std::to_string(sig));
+            if (!signaled || sig != SIGSEGV) {
+                passed = false;
+                data.push_back("FAIL: expected SIGSEGV termination was not observed.");
+            }
+        }
+
+        const bool parentHealthy = fsPathExists("/proc/self/status");
+        data.push_back(std::string("Parent partition health: ") + (parentHealthy ? "healthy" : "unknown"));
+        if (!parentHealthy) {
+            passed = false;
+        }
+    }
+
+    {
+        TestOutput _out;
+        _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
+        _out.severity = passed ? hal::Severity::INFO : hal::Severity::ERROR;
         for (size_t _i = 0; _i < data.size(); ++_i)
             _out.reason["detail_" + std::to_string(_i)] = data[_i];
         return _out;
@@ -547,6 +598,22 @@ std::vector<TestResult> FunctionalSafetyTesting::runAllTests()
         }
     }
 
+    // Run testPartitionFaultHandling
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        TestOutput result = testPartitionFaultHandling();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = end - start;
+        {
+            TestResult _tr;
+            _tr.name = "testPartitionFaultHandling";
+            _tr.test_id = "testPartitionFaultHandling";
+            _tr.duration = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+            _tr.output = result;
+            results.push_back(_tr);
+        }
+    }
+
     return results;
 }
 
@@ -559,6 +626,7 @@ std::vector<std::string> FunctionalSafetyTesting::getAvailableTests()
     return {
         "testLockstepCpuOperation", "testEccOnMemories",         "testRedundantPowerSupplies", "testSafetyMonitoring",
         "testDiagnosticCoverage",   "testFaultInjectionTesting", "testFailsafeBehavior",       "testAsilQsLAndRRailIsolation",
+        "testPartitionFaultHandling",
     };
 }
 
@@ -591,6 +659,8 @@ TestResult FunctionalSafetyTesting::runSingleTest(const std::string& testName)
         result = testFailsafeBehavior();
     } else if (testName == "testAsilQsLAndRRailIsolation") {
         result = testAsilQsLAndRRailIsolation();
+    } else if (testName == "testPartitionFaultHandling") {
+        result = testPartitionFaultHandling();
     } else {
         // Unknown test name
         auto end = std::chrono::high_resolution_clock::now();

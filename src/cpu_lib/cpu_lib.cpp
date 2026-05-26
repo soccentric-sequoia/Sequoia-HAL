@@ -1,12 +1,13 @@
 /**
  * @file cpu_lib.cpp
- * @brief Implementation file for CpuTesting class — Raspberry Pi 5 (BCM2712)
+ * @brief Implementation file for CpuTesting class — Sequoia x86 RT 5 (x86 SoM)
  * @details Tests the quad-core Cortex-A76 CPU running at up to 2.4 GHz.
  * @author sandesh ghimire
  * @copyright (C) Soccentric LLC */
 
 #include "cpu_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
+#include "../rt_engine.h"
 
 #include <algorithm>
 #include <atomic>
@@ -27,12 +28,12 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Raspberry Pi 5 (BCM2712 Cortex-A76) constants — from platform_rpi5.h
+// Sequoia x86 RT 5 (x86 SoM Cortex-A76) constants — from platform_sequoia_x86_rt.h
 // ---------------------------------------------------------------------------
-static constexpr int    CPU_CORES          = RPI5_CPU_CORES;        // 4
-static constexpr double CPU_MAX_FREQ_MHZ   = RPI5_CPU_MAX_FREQ_MHZ; // 2400 MHz
-static constexpr double CPU_MIN_FREQ_MHZ   = RPI5_CPU_MIN_FREQ_MHZ; // 1500 MHz
-static constexpr double CPU_TEMP_WARNING_C = RPI5_CPU_TEMP_MAX_C;   // 85 °C
+static constexpr int    CPU_CORES          = X86RT_CPU_CORES;        // 4
+static constexpr double CPU_MAX_FREQ_MHZ   = X86RT_CPU_MAX_FREQ_MHZ; // 2400 MHz
+static constexpr double CPU_MIN_FREQ_MHZ   = X86RT_CPU_MIN_FREQ_MHZ; // 1500 MHz
+static constexpr double CPU_TEMP_WARNING_C = X86RT_CPU_TEMP_MAX_C;   // 85 °C
 
 // ---------------------------------------------------------------------------
 // Helper utilities
@@ -107,7 +108,7 @@ CpuTesting::~CpuTesting()
 
 // ---------------------------------------------------------------------------
 // 1. testAll12CpuCoresFunctionality
-//    Verify all CPU cores (Cortex-A76 × 4 on Raspberry Pi 5) are online.
+//    Verify all CPU cores (Cortex-A76 × 4 on Sequoia x86 RT 5) are online.
 // ---------------------------------------------------------------------------
 TestOutput CpuTesting::testAll12CpuCoresFunctionality()
 {
@@ -349,15 +350,15 @@ TestOutput CpuTesting::testMulticoreSynchronization()
 
 // ---------------------------------------------------------------------------
 // 5. testCpuClusterCommunication
-//    Verify shared-memory writes are visible across BCM2712 Cortex-A76 cores.
-//    Pi5 has a single cluster of 4 cores; we test two pairs: {0,1} and {2,3}.
+//    Verify shared-memory writes are visible across x86 SoM Cortex-A76 cores.
+//    Sequoia has a single cluster of 4 cores; we test two pairs: {0,1} and {2,3}.
 // ---------------------------------------------------------------------------
 TestOutput CpuTesting::testCpuClusterCommunication()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    // Two logical groups of cores (single physical cluster on BCM2712)
+    // Two logical groups of cores (single physical cluster on x86 SoM)
     const std::vector<int> clusterCores = {0, 2}; // representative core per pair
     const int MAGIC = 0xBC272;
     std::vector<std::atomic<int>> mailbox(clusterCores.size());
@@ -388,7 +389,7 @@ TestOutput CpuTesting::testCpuClusterCommunication()
     }
 
     if (passed)
-        data.push_back("Inter-core communication verified (BCM2712 unified cache domain).");
+        data.push_back("Inter-core communication verified (x86 SoM unified cache domain).");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -467,7 +468,7 @@ TestOutput CpuTesting::testCpuThermalThrottling()
         oss << "Zone " << zone << " (" << type << "): " << tempC << " C";
         data.push_back(oss.str());
         foundAny = true;
-        // BCM2712 thermal zone types on Pi5: "cpu-thermal", "bcm2712", etc.
+        // x86 SoM thermal zone types on Sequoia: "cpu-thermal", "bcm2712", etc.
         bool isCpu = type.find("CPU") != std::string::npos || type.find("cpu") != std::string::npos ||
                      type.find("A76") != std::string::npos || type.find("bcm2712") != std::string::npos ||
                      type.find("rp1") != std::string::npos || type.find("soc") != std::string::npos;
@@ -601,14 +602,14 @@ TestOutput CpuTesting::testL1Cache()
 // ---------------------------------------------------------------------------
 // 10. testL2Cache
 //     Measure L2 cache performance with a 512 KB buffer.
-//     BCM2712 Cortex-A76: 512 KB L2 per core.
+//     x86 SoM Cortex-A76: 512 KB L2 per core.
 // ---------------------------------------------------------------------------
 TestOutput CpuTesting::testL2Cache()
 {
     std::vector<std::string> data;
     bool passed = true;
 
-    const size_t L2_SIZE = 512 * 1024;  // 512 KB — Pi5 Cortex-A76 L2
+    const size_t L2_SIZE = 512 * 1024;  // 512 KB — Sequoia Cortex-A76 L2
     const size_t STRIDE = 64;
     const uint64_t ITERATIONS = 500'000;
 
@@ -648,7 +649,7 @@ TestOutput CpuTesting::testL2Cache()
 // ---------------------------------------------------------------------------
 // 11. testL3Cache
 //     Measure system-level cache / DRAM performance with a 4 MB buffer.
-//     BCM2712 Cortex-A76: no on-die L3; 4 MB exercises DRAM path.
+//     x86 SoM Cortex-A76: no on-die L3; 4 MB exercises DRAM path.
 // ---------------------------------------------------------------------------
 TestOutput CpuTesting::testL3Cache()
 {
@@ -742,7 +743,7 @@ TestOutput CpuTesting::testSystemCache()
 // ---------------------------------------------------------------------------
 // 13. testCacheCoherencyBetweenClusters
 //     Writer (core 0) -> Reader (core 3); 1000 rounds.
-//     Pi5 BCM2712: single cluster — coherency is via shared L2 / AMBA bus.
+//     Sequoia x86 SoM: single cluster — coherency is via shared L2 / AMBA bus.
 // ---------------------------------------------------------------------------
 TestOutput CpuTesting::testCacheCoherencyBetweenClusters()
 {
@@ -763,7 +764,7 @@ TestOutput CpuTesting::testCacheCoherencyBetweenClusters()
             writerDone.store(true, std::memory_order_release);
         });
         std::thread reader([&]() {
-            pinThreadToCore(CPU_CORES - 1); // last core (core 3 on Pi5)
+            pinThreadToCore(CPU_CORES - 1); // last core (core 3 on Sequoia)
             while (!writerDone.load(std::memory_order_acquire))
                 std::this_thread::yield();
             if (sharedValue.load(std::memory_order_acquire) != round + 1)
@@ -775,7 +776,7 @@ TestOutput CpuTesting::testCacheCoherencyBetweenClusters()
 
     data.push_back("Cache coherency rounds: " + std::to_string(ROUNDS));
     data.push_back("Writer: core 0  Reader: core " + std::to_string(CPU_CORES - 1) +
-                   "  (BCM2712 unified AMBA coherency domain)");
+                   "  (x86 SoM unified AMBA coherency domain)");
     data.push_back(passed ? "All rounds passed - cache coherency verified."
                           : "FAIL: Cache coherency violation detected.");
     {
@@ -884,7 +885,7 @@ TestOutput CpuTesting::testCacheBandwidthAndLatency()
         passed = false;
         data.push_back("FAIL: Bandwidth " + std::to_string(bestBW) + " GB/s below 5 GB/s threshold.");
     } else {
-        data.push_back("Memory bandwidth is acceptable (Pi5 LPDDR4X-4267 theoretical: ~17 GB/s).");
+        data.push_back("Memory bandwidth is acceptable (Sequoia LPDDR4X-4267 theoretical: ~17 GB/s).");
     }
     {
         TestOutput _out;
@@ -1175,6 +1176,62 @@ TestOutput CpuTesting::testDmaOperations()
     } else {
         data.push_back("DMA/memcpy operation test completed successfully.");
     }
+    {
+        TestOutput _out;
+        _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
+        _out.severity = passed ? hal::Severity::INFO : hal::Severity::ERROR;
+        for (size_t _i = 0; _i < data.size(); ++_i)
+            _out.reason["detail_" + std::to_string(_i)] = data[_i];
+        return _out;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 21. testIsolatedCoreLatencyJitter
+//     Run a periodic wakeup loop on an isolated core and report jitter.
+// ---------------------------------------------------------------------------
+TestOutput CpuTesting::testIsolatedCoreLatencyJitter()
+{
+    std::vector<std::string> data;
+    bool passed = true;
+
+    const auto cfg = rt_engine::detect_isolation_config();
+    data.push_back(std::string("PREEMPT_RT: ") + (cfg.preempt_rt_enabled ? "enabled" : "not-detected"));
+    data.push_back(std::string("nohz_full: ") + (cfg.nohz_full_enabled ? "enabled" : "not-detected"));
+    data.push_back(std::string("rcu_nocbs: ") + (cfg.rcu_nocbs_enabled ? "enabled" : "not-detected"));
+
+    if (cfg.isolated_cores.empty()) {
+        passed = false;
+        data.push_back("FAIL: no isolated cores found (kernel cmdline isolcpus=...).");
+    } else {
+        int core = cfg.isolated_cores.front();
+        bool aff = rt_engine::set_current_thread_affinity(core);
+        bool fifo = rt_engine::set_current_thread_fifo(80);
+        data.push_back("Selected isolated core: " + std::to_string(core));
+        data.push_back(std::string("Affinity set: ") + (aff ? "yes" : "no"));
+        data.push_back(std::string("SCHED_FIFO set: ") + (fifo ? "yes" : "no") +
+                       (fifo ? "" : " (requires CAP_SYS_NICE)"));
+
+        auto samples = rt_engine::measure_wakeup_jitter_us(1200, 1000);
+        if (samples.empty()) {
+            passed = false;
+            data.push_back("FAIL: jitter sampling produced no data.");
+        } else {
+            const double p50 = rt_engine::percentile_us(samples, 50.0);
+            const double p99 = rt_engine::percentile_us(samples, 99.0);
+            const double worst = *std::max_element(samples.begin(), samples.end());
+
+            data.push_back("Wakeup jitter p50 (us): " + std::to_string(p50));
+            data.push_back("Wakeup jitter p99 (us): " + std::to_string(p99));
+            data.push_back("Wakeup jitter worst (us): " + std::to_string(worst));
+
+            if (p99 > 250.0 || worst > 1000.0) {
+                passed = false;
+                data.push_back("FAIL: jitter exceeds target envelope (p99<=250us, worst<=1000us).");
+            }
+        }
+    }
+
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -1513,6 +1570,22 @@ std::vector<TestResult> CpuTesting::runAllTests()
         }
     }
 
+    // Run testIsolatedCoreLatencyJitter
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        TestOutput result = testIsolatedCoreLatencyJitter();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = end - start;
+        {
+            TestResult _tr;
+            _tr.name = "testIsolatedCoreLatencyJitter";
+            _tr.test_id = "testIsolatedCoreLatencyJitter";
+            _tr.duration = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+            _tr.output = result;
+            results.push_back(_tr);
+        }
+    }
+
     return results;
 }
 
@@ -1543,6 +1616,7 @@ std::vector<std::string> CpuTesting::getAvailableTests()
         "testContextSwitchingPerformance",
         "testInterruptLatency",
         "testDmaOperations",
+        "testIsolatedCoreLatencyJitter",
     };
 }
 
@@ -1599,6 +1673,8 @@ TestResult CpuTesting::runSingleTest(const std::string& testName)
         result = testInterruptLatency();
     } else if (testName == "testDmaOperations") {
         result = testDmaOperations();
+    } else if (testName == "testIsolatedCoreLatencyJitter") {
+        result = testIsolatedCoreLatencyJitter();
     } else {
         // Unknown test name
         auto end = std::chrono::high_resolution_clock::now();

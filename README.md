@@ -1,28 +1,28 @@
-# Acaida-HAL – Hardware Abstraction Library for Raspberry Pi 5
+# Acaida-HAL – Hardware Abstraction Library for Sequoia x86 RT 5
 
 ## Overview
 
-Acaida-HAL is a comprehensive hardware abstraction and testing suite targeting the **Raspberry Pi 5** (BCM2712 SoC + RP1 south-bridge). It provides a modular, extensible architecture for testing and exercising hardware interfaces and system components commonly found in automotive and industrial applications.
+Acaida-HAL is a comprehensive hardware abstraction and testing suite targeting the **Sequoia x86 RT 5** (x86 SoM SoC + platform I/O south-bridge). It provides a modular, extensible architecture for testing and exercising hardware interfaces and system components commonly found in automotive and industrial applications.
 
 > **Port history**: Originally developed for NVIDIA Jetson AGX Orin (Tegra234).
-> Ported to Raspberry Pi 5 (BCM2712 + RP1) — all platform-specific paths, constants,
+> Ported to Sequoia x86 RT 5 (x86 SoM + platform I/O) — all platform-specific paths, constants,
 > and device nodes updated for the Pi 5 hardware.
 
 ### Target Platform
 
 | Property | Value |
 |---|---|
-| SoC | BCM2712 (quad-core Cortex-A76 @ 2.4 GHz) |
-| South-bridge | RP1 (USB 3, PCIe Gen3 x1, GPIO, I2S, CSI/DSI) |
+| SoC | x86 SoM (quad-core Cortex-A76 @ 2.4 GHz) |
+| South-bridge | platform I/O (USB 3, PCIe Gen3 x1, GPIO, I2S, CSI/DSI) |
 | GPU | VideoCore VII (12 shader quad cores, 800 MHz max) |
 | Memory | 4 GB / 8 GB LPDDR4X-4267 |
 | AI Accelerator | Hailo-8 HAT+ (PCIe, ~26 INT8 TOPS) or Coral USB Edge TPU (~4 TOPS) |
-| OS | Raspberry Pi OS (64-bit) / Ubuntu 24.04 ARM64 |
+| OS | Sequoia x86 RT OS (64-bit) / Ubuntu 24.04 ARM64 |
 
 ### Key Features
 
-- **Modular Library Architecture**: Separate libraries for CPU, GPU, DLA (Hailo-8/Coral), video codec (V4L2 M2M), camera (Unicam/RP1), audio (RP1 I2S), PCIe, USB (xhci-hcd), GPIO (gpiochip4), storage, Ethernet, and more.
-- **Pi5 Platform Header**: Centralised constants in `src/platform_rpi5.h` (device paths, thermal thresholds, memory bandwidth).
+- **Modular Library Architecture**: Separate libraries for CPU, GPU, DLA (Hailo-8/Coral), video codec (V4L2 M2M), camera (Unicam/platform I/O), audio (platform I/O I2S), PCIe, USB (xhci-hcd), GPIO (gpiochip0), storage, Ethernet, and more.
+- **Sequoia Platform Header**: Centralised constants in `src/platform_sequoia_x86_rt.h` (device paths, thermal thresholds, memory bandwidth).
 - **Cross-compilation via Docker**: ARM64 Ubuntu 24.04 container (`rpi5-builder`).
 - **Comprehensive Testing**: Unit tests, integration tests, and deployment workflows.
 - **Documentation Generation**: Integrated Doxygen support.
@@ -45,7 +45,7 @@ Acaida-HAL is a comprehensive hardware abstraction and testing suite targeting t
 
 The project supports two primary build methods:
 
-1. **Native Compilation**: Build directly on a Raspberry Pi 5 running 64-bit OS.
+1. **Native Compilation**: Build directly on a Sequoia x86 RT 5 running 64-bit OS.
 2. **Docker-based Cross-Compilation**: Build for ARM64 on any Linux host using the `rpi5-builder` container.
 
 ### Native Compilation (on Pi 5)
@@ -117,7 +117,7 @@ The Docker image is based on `ubuntu:22.04` (ARM64) and is named `acadia`.
 - Module: `v3d`
 
 ### Video Codec
-- H.264 encode/decode: `bcm2835-codec` at `/dev/video10` (encoder), `/dev/video11` (decoder)
+- H.264 encode/decode: `generic-codec` at `/dev/video10` (encoder), `/dev/video11` (decoder)
 - H.265/HEVC decode: `rpivid` at `/dev/video18` or `/dev/video19`
 
 ### Camera (CSI)

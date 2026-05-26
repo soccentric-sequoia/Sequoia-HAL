@@ -1,13 +1,13 @@
 /**
  * @file power_management_lib.cpp
- * @brief Implementation file for PowerManagementTesting class — Raspberry Pi 5
- *        Pi5 PMIC: MXL7704 (multi-phase PMIC), USB-C PD input (5V/3A min, 5A recommended).
+ * @brief Implementation file for PowerManagementTesting class — Sequoia x86 RT 5
+ *        Sequoia PMIC: MXL7704 (multi-phase PMIC), USB-C PD input (5V/3A min, 5A recommended).
  *        No 12V ASIL rails (Jetson concept). No battery. 5V supply rail only.
  * @author sandesh ghimire
  * @copyright (C) Soccentric LLC */
 
 #include "power_management_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <cstdio>
 #include <cstring>
@@ -67,10 +67,10 @@ TestOutput PowerManagementTesting::testMaximumPerformanceMode()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Maximum performance mode check (Pi5 CPUfreq governor)");
+    data.push_back("Maximum performance mode check (Sequoia CPUfreq governor)");
 
     // Check governor per core
-    for (int i = 0; i < RPI5_CPU_CORES; ++i) {
+    for (int i = 0; i < X86RT_CPU_CORES; ++i) {
         std::string base = "/sys/devices/system/cpu/cpu" + std::to_string(i) + "/cpufreq";
         std::string gov  = pwrReadFile(base + "/scaling_governor");
         long long curF   = pwrReadInt(base + "/scaling_cur_freq");
@@ -80,13 +80,13 @@ TestOutput PowerManagementTesting::testMaximumPerformanceMode()
                        " max=" + std::to_string(maxF / 1000) + " MHz");
     }
 
-    // Pi5 max: 2400 MHz
+    // Sequoia max: 2400 MHz
     long long maxF = pwrReadInt("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq");
     data.push_back("cpuinfo_max_freq: " + std::to_string(maxF / 1000) + " MHz" +
-                   " (expected " + std::to_string(RPI5_CPU_MAX_FREQ_MHZ) + " MHz)");
+                   " (expected " + std::to_string(X86RT_CPU_MAX_FREQ_MHZ) + " MHz)");
 
     if (maxF / 1000 < 2400) {
-        data.push_back("NOTE: CPU max freq below 2400 MHz. Check arm_freq= in /boot/firmware/config.txt");
+        data.push_back("NOTE: CPU max freq below 2400 MHz. Check arm_freq= in /boot/firmware/kernel cmdline");
     }
 
     // Check GPU governor
@@ -112,7 +112,7 @@ TestOutput PowerManagementTesting::testPoweroptimizedModes()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power-optimized modes check (Pi5 CPUfreq + devfreq)");
+    data.push_back("Power-optimized modes check (Sequoia CPUfreq + devfreq)");
 
     // List available governors
     std::string govs = pwrReadFile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors");
@@ -149,11 +149,11 @@ TestOutput PowerManagementTesting::testIdlePowerConsumption()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Idle power consumption check (Pi5)");
-    data.push_back("Pi5 idle power: ~2.7W (official, active cooler off)");
+    data.push_back("Idle power consumption check (Sequoia)");
+    data.push_back("Sequoia idle power: ~2.7W (official, active cooler off)");
 
     // Check CPU idle states
-    for (int i = 0; i < RPI5_CPU_CORES; ++i) {
+    for (int i = 0; i < X86RT_CPU_CORES; ++i) {
         std::string base = "/sys/devices/system/cpu/cpu" + std::to_string(i) + "/cpuidle";
         for (int s = 0; s < 4; ++s) {
             std::string sbase = base + "/state" + std::to_string(s);
@@ -165,9 +165,9 @@ TestOutput PowerManagementTesting::testIdlePowerConsumption()
         }
     }
 
-    // Check vcgencmd for under-voltage/current status
-    std::string throttled = pwrRunCmd("vcgencmd get_throttled 2>/dev/null");
-    if (!throttled.empty()) data.push_back("vcgencmd throttled: " + throttled);
+    // Check sequoia-sysmon for under-voltage/current status
+    std::string throttled = pwrRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
+    if (!throttled.empty()) data.push_back("sequoia-sysmon throttled: " + throttled);
 
     data.push_back("PASS: Idle power check complete.");
     {
@@ -188,7 +188,7 @@ TestOutput PowerManagementTesting::testSleepStates()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Sleep/suspend states check (Pi5)");
+    data.push_back("Sleep/suspend states check (Sequoia)");
 
     std::string availMem = pwrReadFile("/sys/power/mem_sleep");
     data.push_back("mem_sleep (available): " + (availMem.empty() ? "not available" : availMem));
@@ -196,8 +196,8 @@ TestOutput PowerManagementTesting::testSleepStates()
     std::string pmState = pwrReadFile("/sys/power/state");
     data.push_back("Available power states: " + (pmState.empty() ? "not available" : pmState));
 
-    data.push_back("Pi5 suspend-to-RAM: limited — use dtparam=act_led_trigger=none to save power");
-    data.push_back("Pi5 power-off: sudo halt / sudo poweroff");
+    data.push_back("Sequoia suspend-to-RAM: limited — use dtparam=act_led_trigger=none to save power");
+    data.push_back("Sequoia power-off: sudo halt / sudo poweroff");
     data.push_back("Wake from halt via: GPIO, USB, network (WoL), or external power cycle.");
 
     data.push_back("PASS: Sleep state check complete.");
@@ -219,7 +219,7 @@ TestOutput PowerManagementTesting::testPowerStateTransitions()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power state transition check (Pi5)");
+    data.push_back("Power state transition check (Sequoia)");
     data.push_back("NOTE: Test does NOT trigger state transitions.");
 
     // Check cpuidle transitions
@@ -260,7 +260,7 @@ TestOutput PowerManagementTesting::testWakeupSources()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Wakeup sources check (Pi5)");
+    data.push_back("Wakeup sources check (Sequoia)");
 
     std::string wakeup = pwrRunCmd("cat /sys/bus/platform/drivers/gpio-keys/*/power/wakeup 2>/dev/null");
     if (!wakeup.empty()) data.push_back("GPIO wakeup: " + wakeup);
@@ -273,7 +273,7 @@ TestOutput PowerManagementTesting::testWakeupSources()
     std::string wol = pwrRunCmd("ethtool eth0 2>/dev/null | grep -i 'wake'");
     if (!wol.empty()) data.push_back("Ethernet WoL: " + wol);
 
-    data.push_back("Pi5 wakeup sources: GPIO (J8 header), USB devices, Ethernet WoL, RTC alarm");
+    data.push_back("Sequoia wakeup sources: GPIO (J8 header), USB devices, Ethernet WoL, RTC alarm");
     data.push_back("PASS: Wakeup sources check complete.");
     {
         TestOutput _out;
@@ -293,8 +293,8 @@ TestOutput PowerManagementTesting::testPowerButtonFunctionality()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power button check (Pi5)");
-    data.push_back("Pi5 has a power button connector (J2) — 2-pin header near micro-HDMI.");
+    data.push_back("Power button check (Sequoia)");
+    data.push_back("Sequoia has a power button connector (J2) — 2-pin header near micro-HDMI.");
 
     // Check input events
     std::string powerBtn = pwrRunCmd("grep -r 'power\\|button' /sys/class/input/*/device/name 2>/dev/null | head -5");
@@ -304,7 +304,7 @@ TestOutput PowerManagementTesting::testPowerButtonFunctionality()
     std::string dmesgPwr = pwrRunCmd("dmesg 2>/dev/null | grep -i 'power.*button\\|pwrbtn' | head -3");
     if (!dmesgPwr.empty()) data.push_back("dmesg: " + dmesgPwr.substr(0, 200));
 
-    data.push_back("Pi5 power button: short press = soft shutdown, long press = hard power off.");
+    data.push_back("Sequoia power button: short press = soft shutdown, long press = hard power off.");
     data.push_back("PASS: Power button check complete.");
     {
         TestOutput _out;
@@ -318,7 +318,7 @@ TestOutput PowerManagementTesting::testPowerButtonFunctionality()
 
 // ---------------------------------------------------------------------------
 // 8. test12vAsilQsLRail
-//    Pi5 does NOT have 12V ASIL rails (Jetson-specific concept).
+//    Sequoia does NOT have 12V ASIL rails (Jetson-specific concept).
 // ---------------------------------------------------------------------------
 TestOutput PowerManagementTesting::test12vAsilQsLRail()
 {
@@ -326,15 +326,15 @@ TestOutput PowerManagementTesting::test12vAsilQsLRail()
     bool passed = true;
 
     data.push_back("12V ASIL QS-L rail check");
-    data.push_back("NOTE: Pi5 does NOT have 12V ASIL safety rails (Jetson AGX Orin concept).");
-    data.push_back("Pi5 input: 5V DC via USB-C (27W PD) or 5V GPIO header (max 3A).");
+    data.push_back("NOTE: Sequoia does NOT have 12V ASIL safety rails (Jetson AGX Orin concept).");
+    data.push_back("Sequoia input: 5V DC via USB-C (27W PD) or 5V GPIO header (max 3A).");
 
     // Check MXL7704 PMIC rails via hwmon
     std::string pmicRails = pwrRunCmd("cat /sys/class/hwmon/hwmon*/in*_input 2>/dev/null | head -10");
     if (!pmicRails.empty()) data.push_back("PMIC voltage rails (hwmon): " + pmicRails.substr(0, 300));
 
-    data.push_back("Pi5 voltage rails: VDD_CORE(~1.0V), VDD_ARM, VDD_IO(3.3V/1.8V)");
-    data.push_back("PASS: 12V ASIL QS-L check complete (N/A on Pi5).");
+    data.push_back("Sequoia voltage rails: VDD_CORE(~1.0V), VDD_ARM, VDD_IO(3.3V/1.8V)");
+    data.push_back("PASS: 12V ASIL QS-L check complete (N/A on Sequoia).");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -354,9 +354,9 @@ TestOutput PowerManagementTesting::test12vAsilQsRRail()
     bool passed = true;
 
     data.push_back("12V ASIL QS-R rail check");
-    data.push_back("NOTE: Pi5 does NOT have 12V ASIL safety rails.");
-    data.push_back("Pi5 uses USB-C PD 5V input with MXL7704 PMIC.");
-    data.push_back("PASS: 12V ASIL QS-R check complete (N/A on Pi5).");
+    data.push_back("NOTE: Sequoia does NOT have 12V ASIL safety rails.");
+    data.push_back("Sequoia uses USB-C PD 5V input with MXL7704 PMIC.");
+    data.push_back("PASS: 12V ASIL QS-R check complete (N/A on Sequoia).");
     {
         TestOutput _out;
         _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
@@ -375,7 +375,7 @@ TestOutput PowerManagementTesting::testAllInternalVoltageRails()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Internal voltage rails check (Pi5 MXL7704 PMIC)");
+    data.push_back("Internal voltage rails check (Sequoia MXL7704 PMIC)");
 
     // Check via hwmon
     bool anyFound = false;
@@ -394,7 +394,7 @@ TestOutput PowerManagementTesting::testAllInternalVoltageRails()
     }
 
     if (!anyFound) {
-        data.push_back("Pi5 voltage rails (documented):");
+        data.push_back("Sequoia voltage rails (documented):");
         data.push_back("  VDD_ARM:  ~1.0V (dynamic, 0.75–1.1V)");
         data.push_back("  VDD_CORE: ~0.9V (dynamic)");
         data.push_back("  3V3:      3.3V  ± 5%");
@@ -402,10 +402,10 @@ TestOutput PowerManagementTesting::testAllInternalVoltageRails()
         data.push_back("  5V:       5V    (USB-C input)");
     }
 
-    // vcgencmd measure_volts
+    // sequoia-sysmon measure_volts
     static const char* const vcRails[] = {"core", "sdram_c", "sdram_i", "sdram_p"};
     for (const char* rail : vcRails) {
-        std::string v = pwrRunCmd((std::string("vcgencmd measure_volts ") + rail + " 2>/dev/null").c_str());
+        std::string v = pwrRunCmd((std::string("sequoia-sysmon measure_volts ") + rail + " 2>/dev/null").c_str());
         if (!v.empty()) data.push_back(std::string(rail) + ": " + v);
     }
 
@@ -428,7 +428,7 @@ TestOutput PowerManagementTesting::testPowerSequencing()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power sequencing check (Pi5 MXL7704 PMIC)");
+    data.push_back("Power sequencing check (Sequoia MXL7704 PMIC)");
     data.push_back("MXL7704 manages rail sequencing: 5V → VDD_ARM → VDD_CORE → peripherals");
 
     std::string dmesgPwr = pwrRunCmd("dmesg 2>/dev/null | grep -i 'pmic\\|mxl\\|regulator\\|power.seq' | head -10");
@@ -456,11 +456,11 @@ TestOutput PowerManagementTesting::testPoweronReset()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power-on reset check (Pi5)");
+    data.push_back("Power-on reset check (Sequoia)");
 
-    std::string vc = pwrRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string vc = pwrRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     if (!vc.empty()) {
-        data.push_back("vcgencmd throttled flags: " + vc);
+        data.push_back("sequoia-sysmon throttled flags: " + vc);
         unsigned long flags = 0;
         if (sscanf(vc.c_str(), "throttled=0x%lx", &flags) == 1 && flags == 0)
             data.push_back("Clean power-on: no throttle/uvolt events.");
@@ -488,11 +488,11 @@ TestOutput PowerManagementTesting::testBrownoutDetection()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Brownout/under-voltage detection check (Pi5)");
+    data.push_back("Brownout/under-voltage detection check (Sequoia)");
 
-    std::string throttled = pwrRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttled = pwrRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     if (!throttled.empty()) {
-        data.push_back("vcgencmd get_throttled: " + throttled);
+        data.push_back("sequoia-sysmon thermal_status: " + throttled);
         unsigned long flags = 0;
         if (sscanf(throttled.c_str(), "throttled=0x%lx", &flags) == 1) {
             bool uvActive  = (flags & 0x1)     != 0;
@@ -507,7 +507,7 @@ TestOutput PowerManagementTesting::testBrownoutDetection()
             }
         }
     } else {
-        data.push_back("vcgencmd not available. Brownout detection via firmware flags.");
+        data.push_back("sequoia-sysmon not available. Brownout detection via firmware flags.");
     }
 
     // Check kernel UV detection
@@ -532,8 +532,8 @@ TestOutput PowerManagementTesting::testOvervoltageProtection()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Overvoltage protection check (Pi5)");
-    data.push_back("Pi5 USB-C PD: negotiates 5V max (no 9V/12V/20V for power input).");
+    data.push_back("Overvoltage protection check (Sequoia)");
+    data.push_back("Sequoia USB-C PD: negotiates 5V max (no 9V/12V/20V for power input).");
     data.push_back("MXL7704 PMIC has built-in overvoltage protection on all rails.");
 
     // Check PMIC OVP status via hwmon if available
@@ -572,10 +572,10 @@ TestOutput PowerManagementTesting::testUndervoltageProtection()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Undervoltage protection check (Pi5)");
-    data.push_back("Pi5 firmware monitors rail voltages and sets throttle flags.");
+    data.push_back("Undervoltage protection check (Sequoia)");
+    data.push_back("Sequoia firmware monitors rail voltages and sets throttle flags.");
 
-    std::string throttled = pwrRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttled = pwrRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     if (!throttled.empty()) data.push_back("Current throttle status: " + throttled);
 
     data.push_back("Low-voltage threshold: <4.63V on 5V rail triggers under-voltage flag.");
@@ -598,9 +598,9 @@ TestOutput PowerManagementTesting::testOvercurrentProtection()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Overcurrent protection check (Pi5)");
-    data.push_back("Pi5 USB-C input: polyfuse or USB PD current limiting.");
-    data.push_back("Pi5 GPIO header 5V output: protected by polyfuse (~2A).");
+    data.push_back("Overcurrent protection check (Sequoia)");
+    data.push_back("Sequoia USB-C input: polyfuse or USB PD current limiting.");
+    data.push_back("Sequoia GPIO header 5V output: protected by polyfuse (~2A).");
     data.push_back("USB-A 5V power: each port limited to 600mA by default.");
 
     // Check USB current limit
@@ -626,12 +626,12 @@ TestOutput PowerManagementTesting::testPowerSupplyRejection()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power supply noise rejection check (Pi5)");
-    data.push_back("Pi5 MXL7704 PMIC: integrated bulk capacitors + LC filtering.");
+    data.push_back("Power supply noise rejection check (Sequoia)");
+    data.push_back("Sequoia MXL7704 PMIC: integrated bulk capacitors + LC filtering.");
     data.push_back("PSRR tested by measuring core voltage stability under load.");
 
     // Compare idle vs loaded core voltage
-    std::string vcIdle = pwrRunCmd("vcgencmd measure_volts core 2>/dev/null");
+    std::string vcIdle = pwrRunCmd("sequoia-sysmon measure_volts core 2>/dev/null");
     if (!vcIdle.empty()) data.push_back("Core voltage (idle): " + vcIdle);
 
     data.push_back("PASS: Power supply rejection check complete (documentation-based).");
@@ -653,8 +653,8 @@ TestOutput PowerManagementTesting::testRealtimePowerConsumption()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Real-time power consumption (Pi5)");
-    data.push_back("Pi5 typical: idle ~2.7W, full load ~12W, max ~27W (USB-C PD)");
+    data.push_back("Real-time power consumption (Sequoia)");
+    data.push_back("Sequoia typical: idle ~2.7W, full load ~12W, max ~27W (USB-C PD)");
 
     // Read from PMIC via hwmon if available
     bool anyPwr = false;
@@ -673,9 +673,9 @@ TestOutput PowerManagementTesting::testRealtimePowerConsumption()
 
     if (!anyPwr) {
         // Estimate from core voltage and frequency
-        std::string vc = pwrRunCmd("vcgencmd measure_volts core 2>/dev/null");
+        std::string vc = pwrRunCmd("sequoia-sysmon measure_volts core 2>/dev/null");
         if (!vc.empty()) data.push_back("Core voltage: " + vc);
-        std::string varms = pwrRunCmd("vcgencmd measure_volts sdram_c 2>/dev/null");
+        std::string varms = pwrRunCmd("sequoia-sysmon measure_volts sdram_c 2>/dev/null");
         if (!varms.empty()) data.push_back("SDRAM-C voltage: " + varms);
         data.push_back("Install powerstat or use INA3221 HAT for accurate power measurement.");
     }
@@ -699,8 +699,8 @@ TestOutput PowerManagementTesting::testPercomponentPowerMeasurement()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Per-component power measurement (Pi5)");
-    data.push_back("Pi5 MXL7704 PMIC: supplies separate rails for CPU, GPU, RAM, IO");
+    data.push_back("Per-component power measurement (Sequoia)");
+    data.push_back("Sequoia MXL7704 PMIC: supplies separate rails for CPU, GPU, RAM, IO");
 
     // CPU power estimate via Perf
     std::string perfPwr = pwrRunCmd("cat /sys/bus/cpu/devices/cpu0/power/runtime_active_time 2>/dev/null");
@@ -710,7 +710,7 @@ TestOutput PowerManagementTesting::testPercomponentPowerMeasurement()
     data.push_back("  CPU (4x Cortex-A76 full load): ~5–8W");
     data.push_back("  GPU (VideoCore VII full load):  ~1–2W");
     data.push_back("  LPDDR4X RAM:                   ~1W");
-    data.push_back("  RP1 south-bridge:              ~0.5W");
+    data.push_back("  platform I/O south-bridge:              ~0.5W");
     data.push_back("  USB/PCIe/Ethernet:             ~1W");
     data.push_back("Use INA3221/INA219 HAT for per-rail measurement.");
 
@@ -733,12 +733,12 @@ TestOutput PowerManagementTesting::testPowerEfficiencyCalculation()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Power efficiency calculation (Pi5)");
+    data.push_back("Power efficiency calculation (Sequoia)");
 
-    // TOPS/W for Pi5
-    data.push_back("Pi5 AI performance: ~13.8 GFLOPS (FP32, VideoCore VII)");
-    data.push_back("Pi5 power budget: ~12W peak");
-    data.push_back("Pi5 efficiency: ~1.15 GFLOPS/W (CPU+GPU, FP32)");
+    // TOPS/W for Sequoia
+    data.push_back("Sequoia AI performance: ~13.8 GFLOPS (FP32, VideoCore VII)");
+    data.push_back("Sequoia power budget: ~12W peak");
+    data.push_back("Sequoia efficiency: ~1.15 GFLOPS/W (CPU+GPU, FP32)");
 
     // Measure current CPU efficiency using MIPS/W
     long long freq = pwrReadInt("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
@@ -766,9 +766,9 @@ TestOutput PowerManagementTesting::testBatteryCharging()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("Battery charging check (Pi5)");
-    data.push_back("Pi5 does NOT have a battery charging circuit.");
-    data.push_back("Pi5 is a single-board computer powered by USB-C PD (5V input only).");
+    data.push_back("Battery charging check (Sequoia)");
+    data.push_back("Sequoia does NOT have a battery charging circuit.");
+    data.push_back("Sequoia is a single-board computer powered by USB-C PD (5V input only).");
 
     // Check if any UPS/battery HAT is attached
     static const char* const battPaths[] = {"/sys/class/power_supply/BAT0",
@@ -786,7 +786,7 @@ TestOutput PowerManagementTesting::testBatteryCharging()
         }
     }
 
-    if (!battPresent) data.push_back("No battery HAT detected. Charging N/A on bare Pi5.");
+    if (!battPresent) data.push_back("No battery HAT detected. Charging N/A on bare Sequoia.");
     data.push_back("PASS: Battery check complete.");
     {
         TestOutput _out;
@@ -806,8 +806,8 @@ TestOutput PowerManagementTesting::testUpsFunctionality()
     std::vector<std::string> data;
     bool passed = true;
 
-    data.push_back("UPS functionality check (Pi5)");
-    data.push_back("Pi5 does not have built-in UPS. UPS requires external HAT.");
+    data.push_back("UPS functionality check (Sequoia)");
+    data.push_back("Sequoia does not have built-in UPS. UPS requires external HAT.");
 
     // Check for UPS devices
     static const char* const upsPaths[] = {"/sys/class/power_supply/UPS0",

@@ -1,6 +1,6 @@
 /**
  * @file reliability_lib.cpp
- * @brief Reliability tests for Raspberry Pi 5 (BCM2712).
+ * @brief Reliability tests for Sequoia x86 RT 5 (x86 SoM).
  *        Tests characterise the long-term health of the board by examining
  *        system uptime, thermal headroom, power-supply stability indicators,
  *        and storage health metrics accessible via kernel sysfs/procfs.
@@ -11,7 +11,7 @@
  */
 
 #include "reliability_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
 
 #include <array>
 #include <cstdio>
@@ -72,16 +72,16 @@ ReliabilityTesting::~ReliabilityTesting()
 TestOutput ReliabilityTesting::testBurninTesting()
 {
     std::vector<std::string> data;
-    data.push_back("=== Burn-In Proxy (5-second stress, Pi5) ===");
+    data.push_back("=== Burn-In Proxy (5-second stress, Sequoia) ===");
 
-    std::string throttlePre = relRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttlePre = relRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     data.push_back("[INFO] Throttle before: " + (throttlePre.empty() ? "N/A" : throttlePre));
 
     // 5-second stress across 4 cores
     int rc = system("for i in 1 2 3 4; do (dd if=/dev/zero bs=1M count=512 2>/dev/null | md5sum &); done; sleep 5; kill $(jobs -p) 2>/dev/null; true");
     (void)rc;
 
-    std::string throttlePost = relRunCmd("vcgencmd get_throttled 2>/dev/null");
+    std::string throttlePost = relRunCmd("sequoia-sysmon thermal_status 2>/dev/null");
     data.push_back("[INFO] Throttle after:  " + (throttlePost.empty() ? "N/A" : throttlePost));
 
     std::string tempStr = relReadFile("/sys/class/thermal/thermal_zone0/temp");
@@ -89,7 +89,7 @@ TestOutput ReliabilityTesting::testBurninTesting()
     {
         double tempC = std::stod(tempStr) / 1000.0;
         data.push_back("[INFO] SoC temp after stress: " + std::to_string(tempC) + " °C");
-        data.push_back(tempC < static_cast<double>(RPI5_THERMAL_THROTTLE_C)
+        data.push_back(tempC < static_cast<double>(X86RT_THERMAL_THROTTLE_C)
                            ? "[PASS] Below throttle threshold"
                            : "[WARN] At/above throttle threshold");
     }
@@ -114,7 +114,7 @@ TestOutput ReliabilityTesting::testBurninTesting()
 TestOutput ReliabilityTesting::testPowerCycling()
 {
     std::vector<std::string> data;
-    data.push_back("=== Power Cycling Resilience (Pi5) ===");
+    data.push_back("=== Power Cycling Resilience (Sequoia) ===");
 
     std::string uptime = relReadFile("/proc/uptime");
     if (!uptime.empty())
@@ -151,8 +151,8 @@ TestOutput ReliabilityTesting::testPowerCycling()
 TestOutput ReliabilityTesting::testThermalCycling()
 {
     std::vector<std::string> data;
-    data.push_back("=== Thermal Cycling Proxy (Pi5) ===");
-    data.push_back("[INFO] Pi5 BCM2712 rated: 0–85 °C junction");
+    data.push_back("=== Thermal Cycling Proxy (Sequoia) ===");
+    data.push_back("[INFO] Sequoia x86 SoM rated: 0–85 °C junction");
 
     bool allOk = true;
     for (int zone = 0; zone <= 1; zone++)
@@ -162,7 +162,7 @@ TestOutput ReliabilityTesting::testThermalCycling()
         std::string type    = relReadFile(base + "/type");
         if (tempStr.empty()) continue;
         double tempC = std::stod(tempStr) / 1000.0;
-        bool ok      = tempC >= 0.0 && tempC < static_cast<double>(RPI5_THERMAL_SHUTDOWN_C);
+        bool ok      = tempC >= 0.0 && tempC < static_cast<double>(X86RT_THERMAL_SHUTDOWN_C);
         data.push_back((ok ? "[PASS] " : "[WARN] ") + type + ": " +
                        std::to_string(tempC) + " °C " + (ok ? "(in spec)" : "(out of spec!)"));
         if (!ok) allOk = false;
@@ -185,13 +185,13 @@ TestOutput ReliabilityTesting::testThermalCycling()
 TestOutput ReliabilityTesting::testMtbf()
 {
     std::vector<std::string> data;
-    data.push_back("=== MTBF Proxy (Pi5) ===");
+    data.push_back("=== MTBF Proxy (Sequoia) ===");
 
     std::string uptimeStr = relReadFile("/proc/uptime");
     if (!uptimeStr.empty())
         data.push_back("[INFO] Uptime: " + std::to_string(static_cast<long>(std::stod(uptimeStr))) + "s");
 
-    data.push_back("[INFO] Pi5 has no on-die ECC DRAM; MTBF via hardware fault counters only");
+    data.push_back("[INFO] Sequoia has no on-die ECC DRAM; MTBF via hardware fault counters only");
 
     std::string pstoreCount = relRunCmd("ls /sys/fs/pstore/ 2>/dev/null | wc -l");
     bool pstoreOops = std::stoi(pstoreCount.empty() ? "0" : pstoreCount) > 0;
@@ -219,7 +219,7 @@ TestOutput ReliabilityTesting::testMtbf()
 TestOutput ReliabilityTesting::testComponentAging()
 {
     std::vector<std::string> data;
-    data.push_back("=== Component Aging Proxy (Pi5) ===");
+    data.push_back("=== Component Aging Proxy (Sequoia) ===");
 
     std::string mmcStat = relReadFile("/sys/block/mmcblk0/stat");
     if (!mmcStat.empty())
@@ -257,7 +257,7 @@ TestOutput ReliabilityTesting::testComponentAging()
 TestOutput ReliabilityTesting::testSolderJointIntegrity()
 {
     std::vector<std::string> data;
-    data.push_back("=== Solder Joint Integrity Proxy (Pi5) ===");
+    data.push_back("=== Solder Joint Integrity Proxy (Sequoia) ===");
     data.push_back("[INFO] Physical testing requires X-ray / thermal imaging");
 
     std::string pcieLinks = relRunCmd(

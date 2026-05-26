@@ -1,16 +1,17 @@
 /**
  * @file system_integration_lib.cpp
- * @brief System integration tests for Raspberry Pi 5.
+ * @brief System integration tests for Sequoia x86 RT 5.
  *        Exercises concurrent subsystem load, resource contention,
  *        end-to-end latency (POSIX clocks), system throughput (memcpy
- *        bandwidth + storage), and Pi5-specific AI/sensor-fusion pipelines
+ *        bandwidth + storage), and Sequoia-specific AI/sensor-fusion pipelines
  *        using libcamera, GStreamer, TFLite, and OpenCV.
  * @author sandesh ghimire
  * @copyright (C) Lucid Motors
  */
 
 #include "system_integration_lib.h"
-#include "../platform_rpi5.h"
+#include "../platform_sequoia_x86_rt.h"
+#include "../rt_engine.h"
 
 #include <array>
 #include <chrono>
@@ -78,7 +79,7 @@ SystemIntegrationTesting::~SystemIntegrationTesting()
 TestOutput SystemIntegrationTesting::testConcurrentOperationOfAllSubsystems()
 {
     std::vector<std::string> data;
-    data.push_back("=== Concurrent Subsystem Operation (Pi5 BCM2712) ===");
+    data.push_back("=== Concurrent Subsystem Operation (Sequoia x86 SoM) ===");
 
     // Start background stress on all 4 cores for 3 s (non-blocking)
     bool stressOk = system("stress-ng --cpu 4 --timeout 3s --quiet 2>/dev/null &") == 0;
@@ -128,7 +129,7 @@ TestOutput SystemIntegrationTesting::testConcurrentOperationOfAllSubsystems()
 TestOutput SystemIntegrationTesting::testResourceContentionHandling()
 {
     std::vector<std::string> data;
-    data.push_back("=== Resource Contention (Pi5 LPDDR4X-4267) ===");
+    data.push_back("=== Resource Contention (Sequoia LPDDR4X-4267) ===");
 
     // Memory pressure
     std::string vmPressure = siReadFile("/proc/pressure/memory");
@@ -167,7 +168,7 @@ TestOutput SystemIntegrationTesting::testResourceContentionHandling()
 TestOutput SystemIntegrationTesting::testSystemBottleneckIdentification()
 {
     std::vector<std::string> data;
-    data.push_back("=== System Bottleneck Identification (Pi5) ===");
+    data.push_back("=== System Bottleneck Identification (Sequoia) ===");
 
     // Load average
     std::string loadavg = siReadFile("/proc/loadavg");
@@ -213,7 +214,7 @@ TestOutput SystemIntegrationTesting::testSystemBottleneckIdentification()
 TestOutput SystemIntegrationTesting::testEndtoendLatency()
 {
     std::vector<std::string> data;
-    data.push_back("=== End-to-End Latency (Pi5 POSIX clocks) ===");
+    data.push_back("=== End-to-End Latency (Sequoia POSIX clocks) ===");
 
     // Measure round-trip time of a popen("cat /proc/version") call
     struct timespec t0 {}, t1 {};
@@ -234,7 +235,7 @@ TestOutput SystemIntegrationTesting::testEndtoendLatency()
     data.push_back("[PASS] 1 MB memcpy latency: " + std::to_string(memNs / 1000) + " µs");
 
     // GPIO latency proxy via /sys/class/gpio or kernel event
-    data.push_back("[INFO] GPIO toggle latency (Pi5 gpiod): typically 1-5 µs via libgpiod");
+    data.push_back("[INFO] GPIO toggle latency (Sequoia gpiod): typically 1-5 µs via libgpiod");
     data.push_back("[INFO] CSI-2 frame latency: approx 1 frame = " +
                    std::to_string(1000 / 30) + " ms at 30 fps");
 
@@ -255,7 +256,7 @@ TestOutput SystemIntegrationTesting::testEndtoendLatency()
 TestOutput SystemIntegrationTesting::testSystemThroughput()
 {
     std::vector<std::string> data;
-    data.push_back("=== System Throughput (Pi5 BCM2712) ===");
+    data.push_back("=== System Throughput (Sequoia x86 SoM) ===");
 
     // Memory bandwidth: 128 MB copy
     static constexpr size_t MB128 = 128ULL * 1024 * 1024;
@@ -277,7 +278,7 @@ TestOutput SystemIntegrationTesting::testSystemThroughput()
 
     // Network throughput (theoretical)
     data.push_back("[INFO] GbE (eth0) throughput: up to " +
-                   std::to_string(RPI5_ETH_SPEED_MBPS) + " Mbps");
+                   std::to_string(X86RT_ETH_SPEED_MBPS) + " Mbps");
 
     bool ok = gbps > 0.5;
     {
@@ -291,14 +292,14 @@ TestOutput SystemIntegrationTesting::testSystemThroughput()
 }
 
 /**
- * @brief Test multimodal AI workload on Pi5 (TFLite + libcamera + ALSA).
- * @details Pi5 has no dedicated AI accelerator.  TFLite with XNNPACK uses
+ * @brief Test multimodal AI workload on Sequoia (TFLite + libcamera + ALSA).
+ * @details Sequoia has no dedicated AI accelerator.  TFLite with XNNPACK uses
  *          NEON SIMD on the Cortex-A76.  Hailo-8 HAT adds 26 TOPS.
  */
 TestOutput SystemIntegrationTesting::testMultimodalAiWorkloads()
 {
     std::vector<std::string> data;
-    data.push_back("=== Multimodal AI (Pi5 TFLite / Hailo-8 HAT) ===");
+    data.push_back("=== Multimodal AI (Sequoia TFLite / Hailo-8 HAT) ===");
 
     // TFLite
     std::string tflite = siRunCmd("python3 -c 'import tflite_runtime; print(tflite_runtime.__version__)' 2>/dev/null");
@@ -331,13 +332,13 @@ TestOutput SystemIntegrationTesting::testMultimodalAiWorkloads()
 }
 
 /**
- * @brief Autonomous driving stack check (Pi5 proxy: ROS2, libcamera, TFLite pipeline).
+ * @brief Autonomous driving stack check (Sequoia proxy: ROS2, libcamera, TFLite pipeline).
  */
 TestOutput SystemIntegrationTesting::testAutonomousDrivingStack()
 {
     std::vector<std::string> data;
-    data.push_back("=== Autonomous Driving Stack (Pi5 proxy) ===");
-    data.push_back("[INFO] Pi5 supports autonomous stack via ROS2 Humble / Pi OS Bookworm");
+    data.push_back("=== Autonomous Driving Stack (Sequoia proxy) ===");
+    data.push_back("[INFO] Sequoia supports autonomous stack via ROS2 Humble / Pi OS Bookworm");
 
     // ROS2
     std::string ros = siRunCmd("ros2 --version 2>/dev/null");
@@ -369,7 +370,7 @@ TestOutput SystemIntegrationTesting::testAutonomousDrivingStack()
 TestOutput SystemIntegrationTesting::testSensorFusionPipeline()
 {
     std::vector<std::string> data;
-    data.push_back("=== Sensor Fusion Pipeline (Pi5 CSI-2 + IIO + GPSD) ===");
+    data.push_back("=== Sensor Fusion Pipeline (Sequoia CSI-2 + IIO + GPSD) ===");
 
     // Camera
     bool camOk = !siRunCmd("ls /dev/video0 2>/dev/null").empty();
@@ -397,6 +398,50 @@ TestOutput SystemIntegrationTesting::testSensorFusionPipeline()
         TestOutput _out;
         _out.status = ok ? hal::Status::PASS : hal::Status::FAIL;
         _out.severity = ok ? hal::Severity::INFO : hal::Severity::ERROR;
+        for (size_t _i = 0; _i < data.size(); ++_i)
+            _out.reason["detail_" + std::to_string(_i)] = data[_i];
+        return _out;
+    }
+}
+
+TestOutput SystemIntegrationTesting::testRtPartitionConfiguration()
+{
+    std::vector<std::string> data;
+    bool passed = true;
+
+    const auto cfg = rt_engine::detect_isolation_config();
+    data.push_back(std::string("PREEMPT_RT kernel: ") + (cfg.preempt_rt_enabled ? "enabled" : "not-detected"));
+    data.push_back(std::string("isolcpus configured: ") + (cfg.isolated_cores.empty() ? "no" : "yes"));
+    data.push_back(std::string("nohz_full configured: ") + (cfg.nohz_full_enabled ? "yes" : "no"));
+    data.push_back(std::string("rcu_nocbs configured: ") + (cfg.rcu_nocbs_enabled ? "yes" : "no"));
+
+    if (cfg.isolated_cores.empty()) {
+        passed = false;
+        data.push_back("FAIL: isolated core set is empty.");
+    } else {
+        std::string cores;
+        for (size_t i = 0; i < cfg.isolated_cores.size(); ++i) {
+            if (i) cores += ",";
+            cores += std::to_string(cfg.isolated_cores[i]);
+        }
+        data.push_back("Isolated cores: " + cores);
+    }
+
+    const bool hv = rt_engine::hypervisor_present();
+    data.push_back(std::string("Hypervisor present: ") + (hv ? "yes" : "no"));
+    if (hv) {
+        std::string kvm = siRunCmd("dmesg 2>/dev/null | grep -E 'kvm|acrn|jailhouse' | head -3");
+        if (!kvm.empty()) {
+            data.push_back("Hypervisor signal: " + kvm);
+        }
+    }
+
+    data.push_back("RT IPC contract: unix_dgram, payload<=128B, avg_rtt<=250us");
+
+    {
+        TestOutput _out;
+        _out.status = passed ? hal::Status::PASS : hal::Status::FAIL;
+        _out.severity = passed ? hal::Severity::INFO : hal::Severity::ERROR;
         for (size_t _i = 0; _i < data.size(); ++_i)
             _out.reason["detail_" + std::to_string(_i)] = data[_i];
         return _out;
@@ -539,6 +584,22 @@ std::vector<TestResult> SystemIntegrationTesting::runAllTests()
         }
     }
 
+    // Run testRtPartitionConfiguration
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        TestOutput result = testRtPartitionConfiguration();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = end - start;
+        {
+            TestResult _tr;
+            _tr.name = "testRtPartitionConfiguration";
+            _tr.test_id = "testRtPartitionConfiguration";
+            _tr.duration = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+            _tr.output = result;
+            results.push_back(_tr);
+        }
+    }
+
     return results;
 }
 
@@ -557,6 +618,7 @@ std::vector<std::string> SystemIntegrationTesting::getAvailableTests()
         "testMultimodalAiWorkloads",
         "testAutonomousDrivingStack",
         "testSensorFusionPipeline",
+        "testRtPartitionConfiguration",
     };
 }
 
@@ -589,6 +651,8 @@ TestResult SystemIntegrationTesting::runSingleTest(const std::string& testName)
         result = testAutonomousDrivingStack();
     } else if (testName == "testSensorFusionPipeline") {
         result = testSensorFusionPipeline();
+    } else if (testName == "testRtPartitionConfiguration") {
+        result = testRtPartitionConfiguration();
     } else {
         // Unknown test name
         auto end = std::chrono::high_resolution_clock::now();

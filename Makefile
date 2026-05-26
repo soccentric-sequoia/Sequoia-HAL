@@ -1,4 +1,4 @@
-# Master Makefile for Acadia HAL
+# Master Makefile for Sequoia HAL
 # Supports both native and Docker-based builds with Ninja
 
 .PHONY: all build configure clean test format cppcheck doc help
@@ -19,7 +19,7 @@ DOCKER_CROSS_BUILD_DIR := /workspace/build/cross
 # Host architecture as shown by file(1) (e.g. x86-64, aarch64)
 HOST_ARCH := $(shell uname -m | sed 's/x86_64/x86-64/')
 
-# IP addresses for Raspberry Pi 5 target devices
+# IP addresses for Sequoia x86 RT 5 target devices
 # Override on the command line: make deploy IP_A=<addr> IP_B=<addr>
 IP_A := 192.168.1.3
 IP_B := 192.168.1.13
