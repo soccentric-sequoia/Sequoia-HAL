@@ -1,8 +1,4 @@
-# Module Inventory and Sequoia Mapping
-
-All 35 HAL modules were read and mapped before edits. Public class names and public method names are preserved.
-
-| Module | Sequoia backend mapping |
+# Module Inventory and Sequoia Mapping All 35 HAL modules were read and mapped before edits. Public class names and public method names are preserved. | Module | Sequoia backend mapping |
 |---|---|
 | audio_interfaces | ALSA/PipeWire + generic Linux sound stack |
 | camera_interfaces_lib | Generic V4L2/media topology (USB/PCI cameras) |
