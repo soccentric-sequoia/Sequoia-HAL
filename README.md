@@ -1,4 +1,64 @@
-# Intel x86 RT 5-HAL – Hardware Abstraction Library for Sequoia x86 RT 5 ## Overview Intel x86 RT 5-HAL is a comprehensive hardware abstraction and testing suite targeting the **Sequoia x86 RT 5** (x86 SoM SoC + platform I/O south-bridge). It provides a modular, extensible architecture for testing and exercising hardware interfaces and system components commonly found in automotive and industrial applications. > **Port history**: Originally developed for Intel x86 RT 5 (Intel x86 RT 5).
+# Sequoia-HAL
+
+## Project Summary
+
+Sequoia-HAL is the C++ hardware-abstraction and validation library used by the
+Sequoia client and related tooling. It presents module-oriented APIs for
+compute, memory, thermal, power, networking, storage, USB/PCIe, GPIO, camera,
+display, audio/video, sensors, safety, and system interfaces. The repository
+contains the implementation headers and sources, protobuf contracts, CMake
+build files, module test programs, Docker helpers, Doxygen configuration, and
+a packaged binary artifact. A shared platform header centralizes target paths,
+constants, and thresholds so individual modules can use the same board model.
+
+The existing implementation inventory and test tree are broad, but successful
+hardware access is necessarily target-dependent. CMake registers many module
+tests, while the README documents native and Docker-based builds plus static
+analysis and deployment helpers. The protobuf subdirectory is the contract
+boundary consumed by Sequoia-Client and server-side services. The library’s
+feature rows below therefore separate source/test presence from claims about
+physical devices, drivers, accelerators, or cross-compiled deployment. A test
+binary existing in the tree is evidence of an executable test surface, not
+evidence that it passed on a board.
+
+The module-oriented layout gives Sequoia-Client a stable place to map hardware
+operations into higher-level runs, while the protobuf files provide shared wire
+contracts for that integration. Driver permissions, kernel support, device
+enumeration, timing, and sensor calibration are outside what a host-only
+compile can establish.
+
+The same caution applies to packaged `.deb` outputs: packaging presence does
+not establish installation success or runtime ABI compatibility.
+
+## Feature Inventory
+
+| # | Name / Description | Implemented? | Test Coverage? | Manual Test |
+|---:|---|---|---|---|
+| 1 | Modular C++ HAL library and common base types | Implemented | Broad module test tree | [ ] Manual verification required |
+| 2 | Sequoia platform constants and device-path mapping | Implemented | Partial; target-dependent | [ ] Manual verification required |
+| 3 | CPU, GPU, and accelerator modules | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 4 | Memory, storage, and thermal modules | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 5 | Power, watchdog, clock, and reliability modules | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 6 | Ethernet, switch, communication, and PCIe modules | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 7 | USB, GPIO, connectors, and MCU interfaces | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 8 | Camera, display, audio, and video interfaces | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 9 | IMU, GNSS, environmental, and specialized HAT modules | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 10 | Functional safety, security, debug, and software interfaces | Implemented | Dedicated module tests present | [ ] Manual verification required |
+| 11 | Protobuf/gRPC contract library | Implemented | Build/test coverage depends on CMake targets | [ ] Manual verification required |
+| 12 | Native build, Docker cross-build, Doxygen, clang-format/cppcheck | Implemented | Command-level evidence only | [ ] Manual verification required |
+| 13 | Real device-driver behavior on Sequoia hardware | Unknown | Requires target hardware | [ ] Manual verification required |
+
+## Build and Test
+
+```bash
+make build
+make run
+make cppcheck
+make format
+```
+
+Run the generated CTest suite from the configured build directory. Module
+tests are under `tests/`; inspect their CMake files for exact target names.
 > Ported to Sequoia x86 RT 5 (x86 SoM + platform I/O) — all platform-specific paths, constants,
 > and device nodes updated for the Intel x86 RT 5 hardware. ### Target Platform | Property | Value |
 |---|---|
