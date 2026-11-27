@@ -36,3 +36,5 @@ cppcheck_results.xml
 build_*/
 build_*/**/*
 build
+# CPack staging output
+_CPack_Packages/

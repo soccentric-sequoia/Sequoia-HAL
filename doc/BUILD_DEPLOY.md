@@ -13,7 +13,7 @@ DEB/RPM/IPK packaging, remote deployment, and Doxygen/quality targets.
   `sudo apt` when absent.
 - `clang-format`, `cppcheck`, Doxygen, and Graphviz for quality/doc targets.
 - `sshpass`, reachable Raspberry Pi 5 targets, and credentials for deployment.
-  Defaults are `nvidia`/`nvidia`; override with `HAL_SSH_USER`, `HAL_SSH_PASS`,
+  Default user is `root` with no password (key-based SSH); override with `HAL_SSH_USER`, `HAL_SSH_PASS`,
   `IP_A`, and `IP_B`. **Credential/device required.**
 
 ## 2. Setup

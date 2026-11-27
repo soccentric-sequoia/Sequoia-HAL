@@ -75,7 +75,7 @@ set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
-set(CPACK_PACKAGE_CONTACT "maintainer@acadia.example.com")
+set(CPACK_PACKAGE_CONTACT "maintainer@sequoia.example.com")
 set(CPACK_STRIP_FILES ON) # Map CMake/system processor to package-manager architecture names
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
 
@@ -94,7 +94,7 @@ set(HAL_RPM_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
 endif() # ---------------------------------------------------------------
 # DEB
 # ---------------------------------------------------------------
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Sequoia <maintainer@acadia.example.com>")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Sequoia <maintainer@sequoia.example.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "embedded")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${HAL_DEB_ARCH}")

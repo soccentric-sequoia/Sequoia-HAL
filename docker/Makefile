@@ -7,7 +7,7 @@ build:
 	docker buildx build --platform linux/arm64 --load --build-arg UID=$(shell id -u) --build-arg GID=$(shell id -g) -t $(IMAGE_NAME) .
 
 run:
-	# No --gpus flag: Intel x86 RT 5 has Intel x86 RT 5 (not CUDA)
+	# No --gpus flag: Intel x86 RT 5 has no CUDA-capable GPU
 	docker run -it --rm --hostname "Intel x86 RT 5" $(IMAGE_NAME)
 
 clean:
